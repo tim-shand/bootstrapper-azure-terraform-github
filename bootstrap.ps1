@@ -78,12 +78,12 @@ function Get-UserConfirm {
     }
 }
 
-# Function: Check for required applications, fail if not detected.
+# Function: Check for required applications.
 function Get-RequiredApps {
     $appResults = @()
     ForEach($app in $requiredApps) {
         Try{
-            # Attempt to get the command for each application to test if actual installed.
+            # Attempt to get the command for each application to test if actually installed.
             Get-Command $app.Command > $null 2>&1
             Write-Log -Level "INF" -Message " - $($app.Name) is installed."
             $appResults += [pscustomobject] @{Name = "$($app.Name)"; Status = "Installed"}
@@ -95,3 +95,63 @@ function Get-RequiredApps {
     }
     return $appResults
 }
+
+#=============================================#
+# MAIN SCRIPT
+#=============================================#
+
+# Clear the console and generate script header message.
+Clear-Host
+Write-Host -ForegroundColor Cyan "`r`n=============== Bootstrap Script: Azure | Terraform | Github ===============`r`n"
+Write-Host -ForegroundColor Cyan "NOTE: This script will perform the following bootstrap steps:"
+Write-Host @"
+- Check required applications are installed.
+- Generate Terraform TFVARS file and create Azure resources for remote Terraform backend.
+- Migrate temporary local Terraform backend used during bootstrap process into Azure.
+`r
+"@
+
+# Check for required applications.
+Write-Log -Level "SYS" -Message "** Performing Check: Required applications"
+if(Get-RequiredApps | Where-Object { $_.Status -eq "Missing" }) {
+    Write-Log -Level "ERR" -Message " - Required applications check failed. Please install missing applications and try again."
+    exit 1
+}
+
+# Validate Azure CLI authentication.
+Write-Log -Level "SYS" -Message "** Performing Check: Validate Azure CLI authenticated session"
+$azSession = az account show -o json | ConvertFrom-JSON 2>$null
+if (-not $azSession) {
+    Write-Log -Level "WRN" -Message " - Not authenticated to Azure CLI. Please run 'az login' and try again."
+    exit 1
+} else{
+    Write-Log -Level "INF" -Message " - Azure CLI logged in as: $($azSession.user.name) [$($azSession.tenantDefaultDomain)]"
+}
+
+# Validate Github CLI authentication.
+Write-Log -Level "SYS" -Message "** Performing Check: Validate Github CLI authenticated session"
+$ghSession = gh api user 2>$null | ConvertFrom-JSON
+if (-not $ghSession) {
+    Write-Log -Level "WRN" -Message " - Not authenticated to GitHub CLI. Please run 'gh auth login' and try again."
+    exit 1
+} else{
+    Write-Log -Level "INF" -Message " - Github CLI logged in as: $($ghSession.login) [$($ghSession.html_url)]"
+}
+
+# Validate local environment variables file.
+Write-Log -Level "SYS" -Message "** Performing Check: Validate environment variables file"
+if(Test-Path -Path ".\env.psd1" -PathType Leaf) {
+    Try{
+        $config = Import-PowerShellDataFile -Path ".\env.psd1"
+        Write-Log -Level "INF" -Message " - Local environment variables file found and imported successfully."
+    }
+    Catch{
+        Write-Log -Level "ERR" -Message " - Validation for local environment variables file failed. Please check configuration and try again."
+        exit 1
+    }
+}
+else {
+    Write-Log -Level "ERR" -Message " - Local environment variables file 'env.psd1' not found. Please create from example file and update values as required."
+    exit 1
+}
+
