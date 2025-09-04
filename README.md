@@ -32,8 +32,8 @@ _Automate the bootstrapping process for an existing Azure tenant, using Terrafor
 
 ## To Do
 
-- [ ] Add example file `example-env.psd1`.
 - [ ] PS Script: Add Github repo check/creation step.
 - [ ] PS Script: Add Terraform TFVARS file builder.
 - [ ] PS Script: Add Terraform deployment process.
 - [ ] PS Script: Add Terraform backend migration process.
+- [ ] Add example file `example-env.psd1`.
