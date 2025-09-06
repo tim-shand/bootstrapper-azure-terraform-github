@@ -140,7 +140,7 @@ if (-not $ghSession) {
 }
 
 # Validate local environment variables file.
-Write-Log -Level "SYS" -Message "** Performing Check: Validate environment variables file"
+Write-Log -Level "SYS" -Message "** Performing Check: Validate local variables file"
 if(Test-Path -Path ".\env.psd1" -PathType Leaf) {
     Try{
         $config = Import-PowerShellDataFile -Path $envFile
@@ -156,4 +156,49 @@ else {
     exit 1
 }
 
-# 
+# Build out Terraform TFVARS file and write to Terraform directory.
+Write-Log -Level "SYS" -Message "** Terraform Configuration: Generating variables file"
+$terraformTFVARS = @"
+# Azure Settings.
+azure_tenant_id = "$($config.azure_tenant_id)" # Target Azure tenant ID.
+location = "$($config.location)" # Desired location for resources to be deployed in Azure.
+platform_subscription_ids = ["$( $config.platform_subscription_ids -join '","')"] # Platform subscriptions (to be moved to workloads MG).
+workload_subscription_ids = ["$( $config.workload_subscription_ids -join '","')"] # Workload subscriptions (to be moved to workloads MG).
+core_management_group_id = "$($config.core_management_group_id)" # Desired ID for the top-level management group (under Tenant Root).
+core_management_group_display_name = "$($config.core_management_group_display_name)" # Display name for the top-level management group (under Tenant Root).
+
+# Naming Settings (used for resource names).
+org_naming = {
+  prefix = "$($config.naming.prefix)" # Short name of organization ("abc").
+  project = "$($config.naming.project)" # Project name for related resources ("platform", "landingzone").
+  service = "$($config.naming.service)" # Service name used in the project ("iac", "mgt", "sec").
+  environment = "$($config.naming.environment)" # Environment for resources/project ("dev", "tst", "prd", "alz").
+}
+
+# Tags (assigned to all bootstrap resources).
+org_tags = {
+  Project = "$($config.tags.Project)"
+  Environment = "$($config.tags.Environment)" # dev, tst, prd, alz
+  Owner = "$($config.tags.Owner)"
+  Creator = "$($config.tags.Creator)"
+  Created = "$(Get-Date -f 'yyyyMMdd.HHmm')"
+}
+
+# GitHub Settings.
+github_config = {
+  org = "$($config.github_config.org)" # Replace with your GitHub organization name.
+  repo = "$($config.github_config.repo)" # Replace with your GitHub repository name.
+  repo_desc = "$($config.github_config.repo_desc)" # Description for the GitHub repository.
+  branch = "$($config.github_config.branch)" # Replace with your GitHub repository name.
+  visibility = "$($config.github_config.visibility)" # Set to "public" or "private" as required.
+}
+"@
+
+Try{
+    Set-Content -Path ".\terraform\bootstrap.tfvars" -Value $terraformTFVARS -Force
+    Write-Log -Level "INF" -Message " - Terraform TFVARS file created successfully."
+}
+Catch{
+    Write-Log -Level "ERR" -Message " - Failed to create Terraform TFVARS file! Please check configuration and try again."
+    exit 1
+}
