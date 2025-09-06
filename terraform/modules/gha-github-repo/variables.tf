@@ -1,4 +1,4 @@
-variable "sub_platform_id" {
+variable "platform_sub_id" {
   description = "The primary subscription ID for the platform landing zone."
   type        = string
 }

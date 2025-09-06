@@ -3,30 +3,26 @@
 # Module: Build out basic management group structure.
 module "bootstrap_management_groups_basic" {
   source = "./modules/gov-management-groups"
-  org_prefix = var.org_prefix
-  sub_platform_ids = var.sub_platform_ids
-  sub_workload_ids = var.sub_workload_ids
+  core_management_group_id = var.core_management_group_id
+  core_management_group_display_name = var.core_management_group_display_name
+  org_naming = var.org_naming
+  platform_subscription_ids = var.platform_subscription_ids
+  workload_subscription_ids = var.workload_subscription_ids
 }
 
 # Module: Build out Terraform remote backend (state) resources.
 module "bootstrap_terraform_backend" {
   source = "./modules/iac-terraform-backend"
   azure_tenant_id = var.azure_tenant_id
-  org_prefix = var.org_prefix
-  org_project = var.org_project
-  org_service = var.org_service
+  org_naming = var.org_naming
   org_tags = var.org_tags
 }
 
 # Module: Create Entra ID resources (group, service principal + federated credential). 
 module "bootstrap_entraid_serviceprincipal" {
   source = "./modules/idn-terraform-serviceprincipal"
-  org_prefix = var.org_prefix
-  org_project = var.org_project
-  org_service = var.org_service
-  github_org = var.github_org
-  github_repo = var.github_repo
-  github_branch = var.github_branch
+  org_naming = var.org_naming
+  github_config = var.github_config
   core_mg_id = module.bootstrap_management_groups_basic.core_mg_id
   depends_on = [ module.bootstrap_management_groups_basic ] # Requires the management groups.
 }
@@ -38,8 +34,5 @@ module "bootstrap_github_repo" {
   sub_platform_id = var.sub_platform_ids[0]
   sp_oidc_appid = module.bootstrap_entraid_serviceprincipal.service_principal_oidc
   github_config = var.github_config
-  # github_org = var.github_org
-  # github_repo = var.github_repo
-  # github_repo_desc = var.github_repo_desc
   depends_on = [ module.bootstrap_entraid_serviceprincipal ] # Requires the management groups.
 }

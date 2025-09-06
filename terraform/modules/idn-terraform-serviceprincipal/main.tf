@@ -4,7 +4,7 @@ data "azuread_client_config" "current" {} # Get current AZ session info.
 
 # Create App Registration and Service Principal for Terraform.
 resource "azuread_application" "entra_iac_app" {
-  display_name     = "${var.org_prefix}-${var.org_project}-${var.org_service}-sp"
+  display_name     = "${var.org_naming["prefix"]}-${var.org_naming["project"]}-${var.org_naming["service"]}-sp"
   logo_image       = filebase64("modules/iam-entra-serviceprincipal/logo.png")
   owners           = [data.azuread_client_config.current.object_id]
   description      = "System: Service Principal for IaC (Terraform)."
@@ -23,7 +23,8 @@ resource "azuread_application_federated_identity_credential" "entra_iac_app_cred
   description    = "Github CI/CD, federated credential."
   audiences      = ["api://AzureADTokenExchange"]
   issuer         = "https://token.actions.githubusercontent.com"
-  subject        = "repo:${var.github_org}/${var.github_repo}:ref:refs/heads/${var.github_branch}"
+  #subject        = "repo:${var.github_org}/${var.github_repo}:ref:refs/heads/${var.github_branch}"
+  subject        = "repo:${var.github_config["org"]}/${var.github_config["repo"]}:ref:refs/heads/${var.github_config["branch"]}"
 }
 
 # Assign 'Contributor' role for SP at top-level management group.
