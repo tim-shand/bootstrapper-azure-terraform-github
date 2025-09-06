@@ -1,7 +1,7 @@
 # Create Github Repository (requires auth'd Github CLI session).
 resource "github_repository" "gh_repo" {
   name          = var.github_repo
-  description   = "Azure: Platform Landing Zone (Basic)"
+  description   = "Azure: Bootstrap platform Landing Zone (Basic)"
   visibility    = "private"
 }
 

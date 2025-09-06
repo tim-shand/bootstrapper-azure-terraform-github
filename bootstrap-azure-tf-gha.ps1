@@ -16,15 +16,16 @@ This script performs the following tasks:
  - Adds bootstrap script and Terraform files into the Github repo.
 
 # USAGE:
-.\scripts\bootstrap\bootstrap-azure-terraform-github.ps1
+.\scripts\bootstrap\bootstrap-azure-tf-gh.ps1
 #>
 
 #=============================================#
 # VARIABLES
 #=============================================#
 
-# Script settings.
+# General Settings.
 $ErrorActionPreference = "Stop" # Set the error action preference to stop on errors.
+$envFile = ".\env.psd1" # Local variables file.
 
 # Required applications.
 $requiredApps = @(
@@ -142,7 +143,7 @@ if (-not $ghSession) {
 Write-Log -Level "SYS" -Message "** Performing Check: Validate environment variables file"
 if(Test-Path -Path ".\env.psd1" -PathType Leaf) {
     Try{
-        $config = Import-PowerShellDataFile -Path ".\env.psd1"
+        $config = Import-PowerShellDataFile -Path $envFile
         Write-Log -Level "INF" -Message " - Local environment variables file found and imported successfully."
     }
     Catch{
@@ -155,3 +156,4 @@ else {
     exit 1
 }
 
+# 
