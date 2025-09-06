@@ -25,7 +25,7 @@ variable "azure_tenant_id" {
 
 variable "github_config" {
   description = "Map of Github configuration settings."
-  type = map()
+  type = map(string)
 }
 
 variable "sp_oidc_appid" {
