@@ -219,3 +219,17 @@ Catch{
 
 # Execute Terraform Deployment
 
+Write-Log -Level "SYS" -Message "** Performing Action: Initialize and apply Terraform configuration"
+Try{
+    # Initialize Terraform.
+    Write-Log -Level "INF" -Message " - Initializing Terraform..."
+    terraform -chdir=terraform init -upgrade
+    # Execute plan and output details for approval.
+    Write-Log -Level "INF" -Message " - Running Terraform plan..."
+    terraform -chdir=terraform plan --out=bootstrap.tfplan -var-file="bootstrap.tfvars"
+
+}
+Catch{
+    Write-Log -Level "ERR" -Message " - Failed to initialize Terraform. Please check configuration and try again."
+    exit 1
+}
