@@ -32,8 +32,8 @@ _Automate the bootstrapping process for an existing Azure tenant, using Terrafor
 
 ## To Do
 
-- Add Terraform deployment (apply) process.
-- Github Actions workflow (YML).
+- Add Terraform deployment (apply) process. 
+- Github Actions workflow (YML) per deployment.
 - Terraform backend migration process.
 - Add example file `example-env.psd1`.
 - Clean up temporary TF files.
