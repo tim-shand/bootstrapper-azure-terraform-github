@@ -31,7 +31,7 @@ module "bootstrap_entraid_serviceprincipal" {
 module "bootstrap_github_repo" {
   source = "./modules/gha-github-repo"
   azure_tenant_id = var.azure_tenant_id
-  sub_platform_id = var.sub_platform_ids[0]
+  platform_sub_id = var.platform_subscription_ids[0]
   sp_oidc_appid = module.bootstrap_entraid_serviceprincipal.service_principal_oidc
   github_config = var.github_config
   depends_on = [ module.bootstrap_entraid_serviceprincipal ] # Requires the management groups.
