@@ -112,33 +112,6 @@ Write-Host @"
 `r
 "@
 
-# Check for required applications.
-Write-Log -Level "SYS" -Message "** Performing Check: Required applications"
-if(Get-RequiredApps | Where-Object { $_.Status -eq "Missing" }) {
-    Write-Log -Level "ERR" -Message " - Required applications check failed. Please install missing applications and try again."
-    exit 1
-}
-
-# Validate Azure CLI authentication.
-Write-Log -Level "SYS" -Message "** Performing Check: Validate Azure CLI authenticated session"
-$azSession = az account show -o json | ConvertFrom-JSON 2>$null
-if (-not $azSession) {
-    Write-Log -Level "WRN" -Message " - Not authenticated to Azure CLI. Please run 'az login' and try again."
-    exit 1
-} else{
-    Write-Log -Level "INF" -Message " - Azure CLI logged in as: $($azSession.user.name) [$($azSession.tenantDefaultDomain)]"
-}
-
-# Validate Github CLI authentication.
-Write-Log -Level "SYS" -Message "** Performing Check: Validate Github CLI authenticated session"
-$ghSession = gh api user 2>$null | ConvertFrom-JSON
-if (-not $ghSession) {
-    Write-Log -Level "WRN" -Message " - Not authenticated to GitHub CLI. Please run 'gh auth login' and try again."
-    exit 1
-} else{
-    Write-Log -Level "INF" -Message " - Github CLI logged in as: $($ghSession.login) [$($ghSession.html_url)]"
-}
-
 # Validate local environment variables file.
 Write-Log -Level "SYS" -Message "** Performing Check: Validate local variables file"
 if(Test-Path -Path ".\env.psd1" -PathType Leaf) {
@@ -154,6 +127,47 @@ if(Test-Path -Path ".\env.psd1" -PathType Leaf) {
 else {
     Write-Log -Level "ERR" -Message " - Local environment variables file 'env.psd1' not found. Please create from example file and update values as required."
     exit 1
+}
+
+# Check for required applications.
+Write-Log -Level "SYS" -Message "** Performing Check: Required applications"
+if(Get-RequiredApps | Where-Object { $_.Status -eq "Missing" }) {
+    Write-Log -Level "ERR" -Message " - Required applications check failed. Please install missing applications and try again."
+    exit 1
+}
+
+# Validate Azure CLI authentication.
+Write-Log -Level "SYS" -Message "** Performing Check: Validate Azure CLI authenticated session"
+$azSession = az account show -o json | ConvertFrom-JSON 2>$null
+if (-not $azSession) {
+    Write-Log -Level "WRN" -Message " - Not authenticated to Azure CLI. Please run 'az login' and try again."
+    exit 1
+} else{
+    Write-Log -Level "INF" -Message " - Azure CLI logged in as: $($azSession.user.name) [$($azSession.tenantDefaultDomain)]"
+    Write-Log -Level "WRN" -Message " - Renaming primary platform subscription [$($config.naming.prefix)-$($config.naming.project)-$($config.naming.environment)-sub]"
+    # Attempt subscription rename for primary platform subscription (position 0 in list).
+    if(Get-UserConfirm){
+        try{
+            # Enable preview extensions.
+            az config set extension.dynamic_install_allow_preview=true
+            # Rename subscription.
+            az account subscription rename --subscription-id "$($config.platform_subscription_ids[0])" `
+            --name "$($config.naming.prefix)-$($config.naming.project)-$($config.naming.environment)-sub"
+        }
+        catch{
+            Write-Log -Level "WRN" -Message " - Failed to rename primary subscription. Skip."
+        }
+    }
+}
+
+# Validate Github CLI authentication.
+Write-Log -Level "SYS" -Message "** Performing Check: Validate Github CLI authenticated session"
+$ghSession = gh api user 2>$null | ConvertFrom-JSON
+if (-not $ghSession) {
+    Write-Log -Level "WRN" -Message " - Not authenticated to GitHub CLI. Please run 'gh auth login' and try again."
+    exit 1
+} else{
+    Write-Log -Level "INF" -Message " - Github CLI logged in as: $($ghSession.login) [$($ghSession.html_url)]"
 }
 
 # Build out Terraform TFVARS file and write to Terraform directory.
@@ -202,3 +216,5 @@ Catch{
     Write-Log -Level "ERR" -Message " - Failed to create Terraform TFVARS file! Please check configuration and try again."
     exit 1
 }
+
+# 
