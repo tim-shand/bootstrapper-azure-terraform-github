@@ -209,7 +209,7 @@ github_config = {
 "@
 
 Try{
-    Set-Content -Path ".\terraform\bootstrap.tfvars" -Value $terraformTFVARS -Force
+    Set-Content -Path ".\terraform\deployments\platform-lz\bootstrap.tfvars" -Value $terraformTFVARS -Force
     Write-Log -Level "INF" -Message " - Terraform TFVARS file created successfully."
 }
 Catch{
@@ -223,10 +223,10 @@ Write-Log -Level "SYS" -Message "** Performing Action: Initialize and apply Terr
 Try{
     # Initialize Terraform.
     Write-Log -Level "INF" -Message " - Initializing Terraform..."
-    terraform -chdir=terraform init -upgrade
+    terraform -chdir=terraform\deployments\platform-lz init -upgrade
     # Execute plan and output details for approval.
     Write-Log -Level "INF" -Message " - Running Terraform plan..."
-    terraform -chdir=terraform plan --out=bootstrap.tfplan -var-file="bootstrap.tfvars"
+    terraform -chdir=terraform\deployments\platform-lz plan --out=bootstrap.tfplan -var-file="bootstrap.tfvars"
 
 }
 Catch{
