@@ -13,8 +13,8 @@ resource "azurerm_management_group" "mg_org_platform" {
 }
 
 resource "azurerm_management_group" "mg_org_workload" {
-  display_name = "Workload"
-  name         = "${var.org_naming["prefix"]}-workload-mg"
+  display_name = "Workloads"
+  name         = "${var.org_naming["prefix"]}-workloads-mg"
   parent_management_group_id = azurerm_management_group.mg_org_core.id
   subscription_ids = var.workload_subscription_ids # List of workload subs.
 }
