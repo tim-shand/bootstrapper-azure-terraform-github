@@ -1,7 +1,7 @@
 # Create core management group for the organization.
 resource "azurerm_management_group" "mg_org_core" {
-  display_name = var.core_management_group_id
-  name         = var.core_management_group_display_name
+  display_name = var.core_management_group_display_name
+  name         = "${var.org_naming["prefix"]}-${var.core_management_group_id}"
 }
 
 # Create child management groups under core management group.
@@ -13,8 +13,8 @@ resource "azurerm_management_group" "mg_org_platform" {
 }
 
 resource "azurerm_management_group" "mg_org_workload" {
-  display_name = "Workloads"
-  name         = "${var.org_naming["prefix"]}-workloads-mg"
+  display_name = "Workload"
+  name         = "${var.org_naming["prefix"]}-workload-mg"
   parent_management_group_id = azurerm_management_group.mg_org_core.id
   subscription_ids = var.workload_subscription_ids # List of workload subs.
 }

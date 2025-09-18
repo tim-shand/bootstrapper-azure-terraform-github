@@ -16,6 +16,16 @@ _Automate the bootstrapping process for an existing Azure tenant, using Terrafor
 ### Inputs
 - See `example-env.psd1` file for required variable values.
 
+### Usage
+
+```powershell
+# Create resources.
+.\bootstrap-azure.ps1
+
+# Remove resources created by deployment.
+.\bootstrap-azure.ps1 -destroy $true
+```
+
 ### Actions
 - Check/Create Github repository (will prompt to create if missing).
 - Clone Terraform files from public "Azure Bootstrapper" Github repository.
@@ -32,8 +42,7 @@ _Automate the bootstrapping process for an existing Azure tenant, using Terrafor
 
 ## To Do
 
-- Add Terraform deployment (apply) process. 
-- Github Actions workflow (YML) per deployment.
 - Terraform backend migration process.
+- Github Actions workflow (YML) per deployment.
 - Add example file `example-env.psd1`.
 - Clean up temporary TF files.

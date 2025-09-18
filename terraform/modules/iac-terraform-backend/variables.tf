@@ -22,3 +22,8 @@ variable "org_tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "service_principal_object_id" {
+  description = "The object ID of the Service Principal to assign roles to."
+  type        = string
+}

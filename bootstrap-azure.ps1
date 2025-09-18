@@ -24,6 +24,9 @@ This script performs the following tasks:
 #=============================================#
 
 # General Settings.
+param(
+    [boolean]$destroy # Provide option to destroy resources instead of create.
+)
 $ErrorActionPreference = "Stop" # Set the error action preference to stop on errors.
 $envFile = ".\env.psd1" # Local variables file.
 
@@ -100,6 +103,28 @@ function Get-RequiredApps {
 #=============================================#
 # MAIN SCRIPT
 #=============================================#
+
+if($destroy){
+    Write-Host -ForegroundColor Red "`r`n=============== WARNING: Destroy Mode Enabled ===============`r`n"
+    Write-Log -Level "WRN" -Message " - WARNING: Destroy mode enabled. This will destroy all resources created by this script!"
+    if(-not (Get-UserConfirm)){
+        exit 1
+    } else{
+        Write-Log -Level "SYS" -Message "** Performing Action: Destroy Terraform-managed resources"
+        Try{
+            # Destroy Terraform-managed resources.
+            #terraform -chdir=terraform\platform-lz destroy -var-file=terraform\platform-lz\bootstrap.tfvars -auto-approve
+            terraform -chdir=terraform\platform-lz plan --out=bootstrap.tfplan -var-file="bootstrap.tfvars"
+            terraform -chdir=terraform\platform-lz apply -destroy bootstrap.tfplan
+            Write-Log -Level "INF" -Message " - Terraform destroy completed successfully."
+            exit 0
+        }
+        Catch{
+            Write-Log -Level "ERR" -Message " - Terraform destroy failed! Please check configuration and try again."
+            exit 1
+        }
+    }
+}
 
 # Clear the console and generate script header message.
 Clear-Host
@@ -209,7 +234,7 @@ github_config = {
 "@
 
 Try{
-    Set-Content -Path ".\terraform\deployments\platform-lz\bootstrap.tfvars" -Value $terraformTFVARS -Force
+    Set-Content -Path ".\terraform\platform-lz\bootstrap.tfvars" -Value $terraformTFVARS -Force
     Write-Log -Level "INF" -Message " - Terraform TFVARS file created successfully."
 }
 Catch{
@@ -223,11 +248,13 @@ Write-Log -Level "SYS" -Message "** Performing Action: Initialize and apply Terr
 Try{
     # Initialize Terraform.
     Write-Log -Level "INF" -Message " - Initializing Terraform..."
-    terraform -chdir=terraform\deployments\platform-lz init -upgrade
+    terraform -chdir=terraform\platform-lz init -upgrade
     # Execute plan and output details for approval.
     Write-Log -Level "INF" -Message " - Running Terraform plan..."
-    terraform -chdir=terraform\deployments\platform-lz plan --out=bootstrap.tfplan -var-file="bootstrap.tfvars"
-
+    terraform -chdir=terraform\platform-lz plan --out=bootstrap.tfplan -var-file="bootstrap.tfvars"
+    # Execute plan and output details for approval.
+    Write-Log -Level "INF" -Message " - Running Terraform apply..."
+    terraform -chdir=terraform\platform-lz apply bootstrap.tfplan
 }
 Catch{
     Write-Log -Level "ERR" -Message " - Failed to initialize Terraform. Please check configuration and try again."

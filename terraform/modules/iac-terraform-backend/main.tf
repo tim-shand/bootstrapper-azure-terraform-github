@@ -34,3 +34,10 @@ resource "azurerm_storage_container" "tf_sc" {
   storage_account_id    = azurerm_storage_account.tf_sa.id
   container_access_type = "private"
 }
+
+# Assign 'Storage Data Contributor' role for SP.
+resource "azurerm_role_assignment" "rbac_mg_iac" {
+  scope                = azurerm_storage_account.tf_sa.id
+  role_definition_name = "Storage Blob Data Contributor"
+  principal_id         = var.service_principal_object_id
+}
