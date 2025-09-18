@@ -4,6 +4,6 @@ output "service_principal_oidc" {
 }
 
 output "service_principal_object_id" {
-  value = azuread_application_federated_identity_credential.entra_iac_app_cred.id
+  value = azuread_service_principal.entra_iac_sp.object_id
   description = "Service Principal object ID."
 }
