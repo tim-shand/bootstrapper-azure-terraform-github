@@ -45,4 +45,4 @@ _Automate the bootstrapping process for an existing Azure tenant, using Terrafor
 - Terraform backend migration process.
 - Github Actions workflow (YML) per deployment.
 - Add example file `example-env.psd1`.
-- Clean up temporary TF files.
+- Clean up temporary TF files. 
