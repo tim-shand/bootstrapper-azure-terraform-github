@@ -260,3 +260,5 @@ Catch{
     Write-Log -Level "ERR" -Message " - Failed to initialize Terraform. Please check configuration and try again."
     exit 1
 }
+
+# EOF
