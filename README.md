@@ -39,10 +39,13 @@ _Automate the bootstrapping process for an existing Azure tenant, using Terrafor
 - Add OIDC details to Github Actions for repository.
 - Assign RBAC 'Contributor' for Service Principal to "Core" Management Group.
 - Migrate Terraform state to remote backend in Azure.
+- Commit Terraform and Powershell files to created Github repo.
 
 ## To Do
 
-- Switch to using PS for SP and backend creation (chicken and egg).
+- Migrate local Terraform state to Azure created resources.
+- Upload code to Github once deployed.
+- Add option for destroy.
 - Github Actions workflow (YML).
 - Add example file `example-env.psd1`.
 - Clean up temporary TF files. 
