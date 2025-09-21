@@ -31,7 +31,6 @@ param(
 #$ErrorActionPreference = "Stop" # Set the error action preference to stop on errors.
 $workingDir = (Get-Location).Path # Current working directory.
 $envFile = "$workingDir\env.psd1" # Local variables file.
-$tfDir = "$workingDir\terraform" # Directory to store generated files.
 
 # Required applications.
 $requiredApps = @(
@@ -168,6 +167,7 @@ if (-not $azSession) {
                 Write-Log -Level "INF" -Message " - Setting subscription name to: $($config.naming.prefix)-$($config.naming.project)-$($config.naming.environment)-sub [$($azSession.id)]"
                 $subRename = az account subscription rename --subscription-id "$($config.platform_subscription_ids[0])" `
                 --name "$($config.naming.prefix)-$($config.naming.project)-$($config.naming.environment)-sub" --only-show-errors
+                $subRename | Out-Null
             }
             Catch{
                 Write-Log -Level "WRN" -Message " - Failed to rename subscription. Please check permissions and try again. Skip."
