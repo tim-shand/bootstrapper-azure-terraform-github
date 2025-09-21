@@ -7,7 +7,6 @@ resource "azuread_application" "entra_iac_app" {
   display_name     = "${var.org_naming["prefix"]}-${var.org_naming["project"]}-${var.org_naming["service"]}-sp"
   logo_image       = filebase64("../modules/idn-terraform-serviceprincipal/logo.png")
   owners           = [data.azuread_client_config.current.object_id]
-  #description      = "System: Service Principal for IaC (Terraform)."
   notes            = "System: Service Principal for IaC (Terraform)."
 }
 
