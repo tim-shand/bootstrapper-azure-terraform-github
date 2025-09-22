@@ -12,7 +12,7 @@ This script performs the following tasks:
 - Validates Github CLI authentication, confirms provided repo name is available (prompts to delete if exists).
 - Creates Azure resources for remote Terraform backend.
 - Generates Terraform variable file (TFVARS) from local environment variables.
-- Initializes and applies Terraform configuration to create base resources Azure.
+- Initializes and applies Terraform configuration to create base resources in Azure.
 - Adds bootstrap script and Terraform files into the Github repo.
 
 # USAGE:
