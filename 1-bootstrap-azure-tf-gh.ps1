@@ -210,14 +210,37 @@ if (-not $ghSession) {
 }
 
 #=============================================#
+# MAIN: DESTROY Resources
+#=============================================#
+if($destroy) {
+    Write-Log -Level "WRN" -Message "------------------------------------------------------"
+    Write-Log -Level "WRN" -Message "All resources deployed by this script will be removed."
+    Write-Log -Level "WRN" -Message "------------------------------------------------------"
+    if(Get-UserConfirm){
+        Try{
+            Write-Host "DESTROY" -ForegroundColor Green
+            Write-Log -Level "INF" -Message " - Initializing Terraform..."
+            terraform -chdir=terraform\bootstrap init -upgrade
+            Write-Log -Level "INF" -Message " - Running Terraform destroy..."
+            terraform -chdir=terraform\bootstrap destroy -var-file="bootstrap.tfvars" --auto-approve
+            Write-Log -Level "INF" -Message " - Resources destroyed successfully."
+            exit 0
+        }
+        Catch{
+            Write-Log -Level "ERR" -Message " - Terraform destroy failed. Please check configuration and try again."
+            exit 1
+        }
+    } else{
+        Write-Log -Level "WRN" -Message " - Terraform destroy aborted by user."
+        exit 1
+    }
+}
+
+#=============================================#
 # MAIN: Deploy Resources
 #=============================================#
 
-# Execute Terraform Deployment
-### DESTROY ###
-if( -not $destroy) {
-
-    ### BUILD ###
+# Execute Terraform Deployment.
 # Build out Terraform TFVARS file from local env.psd1 file and write to Terraform directory.
 Write-Log -Level "SYS" -Message "Terraform Configuration: Generating variables file: "
 $terraformTFVARS = @"
@@ -257,49 +280,44 @@ github_config = {
 "@
 Set-Content -Path ".\terraform\bootstrap\bootstrap.tfvars" -Value $terraformTFVARS -Force
 
-    Write-Log -Level "SYS" -Message "Performing Action: Initialize and apply Terraform configuration..."
-    Try{
-        Write-Host "APPLY" -ForegroundColor Green
-        Write-Log -Level "INF" -Message " - Initializing Terraform..."
-        terraform -chdir=terraform\bootstrap init -upgrade
-        Write-Log -Level "INF" -Message " - Running Terraform plan..."
-        terraform -chdir=terraform\bootstrap plan --out=bootstrap.tfplan -var-file="bootstrap.tfvars"
-        Write-Log -Level "WRN" -Message "The above plan will be applied to the target Azure tenant."
-        if(Get-UserConfirm){
-            Write-Log -Level "INF" -Message " - Running Terraform apply..."
-            terraform -chdir=terraform\bootstrap apply bootstrap.tfplan
-            Write-Log -Level "INF" -Message " - Bootstrap resources deployed successfully."
-        }
-        else{
-            Write-Log -Level "WRN" -Message " - Terraform apply aborted by user."
-            exit 1
-        }
-    }
-    Catch{
-        Write-Log -Level "ERR" -Message " - Terraform deployment failed. Please check configuration and try again."
-        exit 1
-    }
-} else{
-    ### DESTROY ###
-    Write-Log -Level "WRN" -Message "------------------------------------------------------"
-    Write-Log -Level "WRN" -Message "All resources deployed by this script will be removed."
-    Write-Log -Level "WRN" -Message "------------------------------------------------------"
+Write-Log -Level "SYS" -Message "Performing Action: Initialize and apply Terraform configuration..."
+Try{
+    Write-Host "APPLY" -ForegroundColor Green
+    Write-Log -Level "INF" -Message " - Initializing Terraform..."
+    terraform -chdir=terraform\bootstrap init -upgrade
+    Write-Log -Level "INF" -Message " - Running Terraform plan..."
+    terraform -chdir=terraform\bootstrap plan --out=bootstrap.tfplan -var-file="bootstrap.tfvars"
+    Write-Log -Level "WRN" -Message "The above plan will be applied to the target Azure tenant."
     if(Get-UserConfirm){
-        Try{
-            Write-Host "DESTROY" -ForegroundColor Green
-            Write-Log -Level "INF" -Message " - Initializing Terraform..."
-            terraform -chdir=terraform\bootstrap init -upgrade
-            Write-Log -Level "INF" -Message " - Running Terraform destroy..."
-            terraform -chdir=terraform\bootstrap destroy -var-file="bootstrap.tfvars" --auto-approve
-            Write-Log -Level "INF" -Message " - Resources destroyed successfully."
-            exit 0
-        }
-        Catch{
-            Write-Log -Level "ERR" -Message " - Terraform destroy failed. Please check configuration and try again."
-            exit 1
-        }
-    } else{
-        Write-Log -Level "WRN" -Message " - Terraform destroy aborted by user."
+        Write-Log -Level "INF" -Message " - Running Terraform apply..."
+        terraform -chdir=terraform\bootstrap apply bootstrap.tfplan
+        Write-Log -Level "INF" -Message " - Bootstrap resources deployed successfully."
+    }
+    else{
+        Write-Log -Level "WRN" -Message " - Terraform apply aborted by user."
         exit 1
     }
+}
+Catch{
+    Write-Log -Level "ERR" -Message " - Terraform deployment failed. Please check configuration and try again."
+    exit 1
+}
+
+#=============================================#
+# MAIN: Clean Up
+#=============================================#
+
+# Remove temporary TF files.
+Write-Log -Level "SYS" -Message "Performing Action: Clean up temporary files..."
+Try{
+    Remove-Item -Path ".\terraform\bootstrap\bootstrap.tfvars" -Force -ErrorAction SilentlyContinue
+    Remove-Item -Path ".\terraform\bootstrap\bootstrap.tfplan" -Force -ErrorAction SilentlyContinue
+    #Remove-Item -Path ".\terraform\bootstrap\.terraform" -Recurse -Force -ErrorAction SilentlyContinue
+    #Remove-Item -Path ".\terraform\bootstrap\.terraform.lock.hcl" -Force -ErrorAction SilentlyContinue
+    #Remove-Item -Path ".\terraform\bootstrap\terraform.tfstate" -Force -ErrorAction SilentlyContinue
+    #Remove-Item -Path ".\terraform\bootstrap\terraform.tfstate.backup" -Force -ErrorAction SilentlyContinue
+    Write-Log -Level "INF" -Message " - Temporary files removed."
+}
+Catch{
+    Write-Log -Level "WRN" -Message " - Failed to remove some temporary files. Please remove manually."
 }
