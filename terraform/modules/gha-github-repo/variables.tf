@@ -8,21 +8,6 @@ variable "azure_tenant_id" {
   type        = string
 }
 
-# variable "github_org" {
-#   description = "The Github organization to use for the repository."
-#   type        = string
-# }
-
-# variable "github_repo" {
-#   description = "The Github repository to use for the infrastructure code."
-#   type        = string
-# }
-
-# variable "github_repo_desc" {
-#   description = "The description for the Github repository used for the infrastructure code."
-#   type        = string
-# }
-
 variable "github_config" {
   description = "Map of Github configuration settings."
   type = map(string)
@@ -30,5 +15,20 @@ variable "github_config" {
 
 variable "sp_oidc_appid" {
   description = "The application ID of the Service Principal used for CI/CD."
+  type        = string
+}
+
+variable "tf_backend_rg_name" {
+  description = "Terraform backend resource group name."
+  type        = string
+}
+
+variable "tf_backend_sa_name" {
+  description = "Terraform backend storage account name."
+  type        = string
+}
+
+variable "tf_backend_cn_name" {
+  description = "Terraform backend container name."
   type        = string
 }

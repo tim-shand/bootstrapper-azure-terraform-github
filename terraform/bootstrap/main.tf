@@ -35,6 +35,11 @@ module "bootstrap_github_repo" {
   platform_sub_id = var.platform_subscription_ids[0]
   sp_oidc_appid = module.bootstrap_entraid_serviceprincipal.service_principal_oidc
   github_config = var.github_config
+
+  tf_backend_rg_name = module.bootstrap_terraform_backend.tf_backend_rg_name
+  tf_backend_sa_name = module.bootstrap_terraform_backend.tf_backend_sa_name
+  tf_backend_cn_name = module.bootstrap_terraform_backend.tf_backend_cn_name
+
   depends_on = [ 
     module.bootstrap_entraid_serviceprincipal,
     module.bootstrap_terraform_backend
