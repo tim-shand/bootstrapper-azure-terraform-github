@@ -27,17 +27,13 @@ _Automate the bootstrapping process for an existing Azure tenant, using Terrafor
 ```
 
 ### Actions
-- Check/Create Github repository (will prompt to create if missing).
-- Clone Terraform files from public "Azure Bootstrapper" Github repository.
-- Push cloned files into provided/new repository.
-- Build TFVARS file from Powershell "env.psd1" file.
+- Build Terraform TFVARS file from Powershell "env.psd1" file.
 - Rename provided Azure platform subscription.
 - Create Management Group structure.
-- Create Resources for Terraform backend.
-- Create Service Principal.
-- Create Service Principal OIDC (Federated) credential.
-- Add OIDC details to Github Actions for repository.
-- Assign RBAC 'Contributor' for Service Principal to "Core" Management Group.
+- Create Resources for Terraform backend (Resource Group, Storage Account, Container).
+- Create Service Principal with OIDC (Federated) credential.
+- Add OIDC details and Terraform backend details to Github Actions Secrets/Variables.
+- Assign RBAC 'Contributor' for Service Principal to 'Core' Management Group.
 - Migrate Terraform state to remote backend in Azure.
 - Commit Terraform and Powershell files to created Github repo.
 
@@ -45,7 +41,5 @@ _Automate the bootstrapping process for an existing Azure tenant, using Terrafor
 
 - Migrate local Terraform state to Azure created resources.
 - Upload code to Github once deployed.
-- Add option for destroy.
 - Github Actions workflow (YML).
 - Add example file `example-env.psd1`.
-- Clean up temporary TF files. 
