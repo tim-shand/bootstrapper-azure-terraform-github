@@ -308,3 +308,15 @@ Catch{
 # MAIN: Migrate State to Remote Backend
 #=============================================#
 
+$tfBackendConfig = @"
+terraform {
+  backend "azurerm" {
+    resource_group_name  = "my-terraform-state-rg"
+    storage_account_name = "myterraformstateaccount"
+    container_name       = "tfstate"
+    key                  = "terraform.tfstate"
+  }
+}
+"@
+#Set-Content -Path ".\terraform\bootstrap\backend.tf" -Value $tfBackendConfig -Force
+

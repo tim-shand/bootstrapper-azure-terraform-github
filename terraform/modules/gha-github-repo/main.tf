@@ -38,16 +38,19 @@ resource "github_actions_variable" "gh_var_tf_rg" {
   repository       = var.github_config["repo"]
   variable_name    = "TF_BACKEND_RG_NAME"
   value            = var.tf_backend_rg_name
+  depends_on = [ github_repository.gh_repo ]
 }
 
 resource "github_actions_variable" "gh_var_tf_sa" {
   repository       = var.github_config["repo"]
   variable_name    = "TF_BACKEND_SA_NAME"
   value            = var.tf_backend_sa_name
+  depends_on = [ github_repository.gh_repo ]
 }
 
 resource "github_actions_variable" "gh_var_tf_cn" {
   repository       = var.github_config["repo"]
   variable_name    = "TF_BACKEND_CN_NAME"
   value            = var.tf_backend_cn_name
+  depends_on = [ github_repository.gh_repo ]
 }
