@@ -6,18 +6,20 @@
 # DESCRIPTION:
 Bootstrap script to prepare Azure tenant for management via Terraform and Github Actions.
 This script performs the following tasks:
-- Checks for required local applications (Azure CLI, Terraform, Git, GitHub CLI).
 - Checks for local environment variables file and imports configuration.
+- Checks for required local applications (Azure CLI, Terraform, Git, GitHub CLI).
 - Validates Azure CLI authentication and intended Azure tenant ID matches current session.
-- Validates Github CLI authentication, confirms provided repo name is available (prompts to delete if exists).
-- Creates Azure resources for remote Terraform backend.
+- Validates Github CLI authentication, confirms provided repo name is available (prompts to create if missing).
+- Create Service Principal for Terraform with role assignments.
+- Creates Azure resources for remote Terraform backend (Resource Group, Storage Account, Blob Container).
+
 - Generates Terraform variable file (TFVARS) from local environment variables.
 - Initializes and applies Terraform configuration to create base resources Azure.
 - Adds bootstrap script and Terraform files into the Github repo.
 
 # USAGE:
-.\bootstrap-azure-tf-gh.ps1
-.\bootstrap-azure-tf-gh.ps1 -destroy
+.\bootstrap-az-tf-gh.ps1
+.\bootstrap-az-tf-gh.ps1 -destroy
 #>
 
 #=============================================#
@@ -28,7 +30,7 @@ This script performs the following tasks:
 param(
     [switch]$destroy # If set, will destroy all resources created by this script.
 )
-#$ErrorActionPreference = "Stop" # Set the error action preference to stop on errors.
+$ErrorActionPreference = "Stop" # Set the error action preference to stop on errors.
 $workingDir = (Get-Location).Path # Current working directory.
 $envFile = "$workingDir\env.psd1" # Local variables file.
 
@@ -38,7 +40,7 @@ $requiredApps = @(
     [PSCustomObject]@{ Name = "Terraform"; Command = "terraform" }
     [PSCustomObject]@{ Name = "Git"; Command = "git" }
     [PSCustomObject]@{ Name = "GitHub CLI"; Command = "gh" }
-    #[PSCustomObject]@{ Name = "Fake App"; Command = "TestingTesting" }
+    #[PSCustomObject]@{ Name = "Fake App"; Command = "ghfghbsdhgs" }
 )
 
 #=============================================#
@@ -155,9 +157,8 @@ if (-not $azSession) {
     Write-Log -Level "INF" -Message " - Azure CLI logged in as: $($azSession.user.name) [$($azSession.tenantDefaultDomain)]"
     # Check intended Azure tenant ID matches current session.
     if ($azSession.tenantId -ne $config.azure_tenant_id) {
-        Write-Log -Level "ERR" -Message " - Azure CLI tenant ID does not match intended target tenant. Please switch to the correct tenant and try again."
-        Write-Log -Level "ERR" -Message "   - Current session tenant ID: $($azSession.tenantId)"
-        Write-Log -Level "ERR" -Message "   - Intended target tenant ID: $($config.azure_tenant_id)"
+        Write-Log -Level "ERR" -Message " - Azure CLI tenant ID does not match intended target. Please switch to the correct tenant and try again."
+        Write-Log -Level "ERR" -Message "   - Current session tenant ID: $($azSession.tenantId) != $($config.azure_tenant_id)"
         exit 1
     } else{
         Write-Log -Level "INF" -Message " - Current session tenant ID matches intended target: $($config.azure_tenant_id)"
@@ -165,8 +166,8 @@ if (-not $azSession) {
             Try{
                 # Rename default subscription as platform landing zone.
                 Write-Log -Level "INF" -Message " - Setting subscription name to: $($config.naming.prefix)-$($config.naming.project)-$($config.naming.environment)-sub [$($azSession.id)]"
-                $subRename = az account subscription rename --subscription-id "$($config.platform_subscription_ids[0])" `
-                --name "$($config.naming.prefix)-$($config.naming.project)-$($config.naming.environment)-sub" --only-show-errors
+                #$subRename = az account subscription rename --subscription-id "$($config.platform_subscription_ids[0])" `
+                #--name "$($config.naming.prefix)-$($config.naming.project)-$($config.naming.environment)-sub" --only-show-errors
                 $subRename | Out-Null
             }
             Catch{
@@ -183,27 +184,30 @@ if (-not $ghSession) {
     Write-Host "FAIL" -ForegroundColor Red
     Write-Log -Level "WRN" -Message " - Not authenticated to GitHub CLI. Please run 'gh auth login' and try again."
     exit 1
-} else{
+} 
+else{
     Write-Host "PASS" -ForegroundColor Green
     Write-Log -Level "INF" -Message " - Github CLI logged in as: $($ghSession.login) [$($ghSession.html_url)]"
-    # Check if provided repo exists, prompt to remove it as it will be re-created by Terraform.
+    # Check for existing repository with provided name.    
     $repoCheck = (gh repo list --json name | ConvertFrom-JSON)
-    if ($repoCheck | Where-Object {$_.name -eq "$($config.github_config.org)/$($config.github_config.repo)"} ) {
-        Write-Log -Level "WRN" -Message " - Repository '$($config.github_config.org)/$($config.github_config.repo)' already exists."
-        Write-Log -Level "WRN" -Message " - This repository must be removed and re-created by Terraform to ensure proper configuration."
-        Write-Log -Level "WRN" -Message " - If you cannot remove this repository, please provide a different repository name. Overwrite?"
+    if ($repoCheck | Where-Object {$_.name -eq "$($config.github_config.repo)"} ) {
+        Write-Log -Level "INF" -Message " - Provided repository '$($config.github_config.org)/$($config.github_config.repo)' found."
+    }
+    else{
+        Write-Log -Level "WRN" -Message " - Provided repository '$($config.github_config.org)/$($config.github_config.repo)' not found. Create now?"
         if(Get-UserConfirm){
             try{
-                gh repo delete "$($config.github_config.org)/$($config.github_config.repo)" --yes
-                Write-Log -Level "INF" -Message " - Repository '$($config.github_config.org)/$($config.github_config.repo)' removed successfully."
+                gh repo create "$($config.github_config.org)/$($config.github_config.repo)" --$($config.github_config.visibility) `
+                --description "$($config.github_config.repo_desc)" 2>$null
+                Write-Log -Level "INF" -Message " - Repository '$($config.github_config.org)/$($config.github_config.repo)' created successfully."
             }
             catch{
-                Write-Log -Level "ERR" -Message " - Failed to delete GitHub repository. Please check configuration and try again."
+                Write-Log -Level "ERR" -Message " - Failed to create GitHub repository. Please check configuration and try again."
                 exit 1
             }
         }
         else{
-            Write-Log -Level "ERR" -Message " - Repository deletion aborted. Please remove manually, or provide a different name and try again."
+            Write-Log -Level "ERR" -Message " - Repository creation aborted. Please create manually, or provide a different name and try again."
             exit 1
         }
     }
@@ -213,93 +217,61 @@ if (-not $ghSession) {
 # MAIN: Deploy Resources
 #=============================================#
 
-# Execute Terraform Deployment
-### DESTROY ###
-if( -not $destroy) {
+# Set names for resources to be created.
+$rnd = Get-Random -Minimum 10000000 -Maximum 99999999 # Random number to ensure storage account name is unique.
+$servicePrincipalName = "$($config.naming.prefix)-$($config.naming.project)-$($config.naming.service)-sp"
+$resourceGroupName = ("$($config.naming.prefix)-$($config.naming.project)-$($config.naming.service)-rg").ToLower()
+$storageAccountNameInit = ($config.naming.prefix + $config.naming.project + $config.naming.service + "sa").ToLower()
+$storageAccountName = $storageAccountNameInit.Substring(0, [System.Math]::Min($storageAccountNameInit.Length, 16))+$rnd
+$containerName = "tfstate"
 
-    ### BUILD ###
-# Build out Terraform TFVARS file from local env.psd1 file and write to Terraform directory.
-Write-Log -Level "SYS" -Message "Terraform Configuration: Generating variables file: "
-$terraformTFVARS = @"
-# Azure Settings.
-azure_tenant_id = "$($config.azure_tenant_id)" # Target Azure tenant ID.
-location = "$($config.location)" # Desired location for resources to be deployed in Azure.
-platform_subscription_ids = ["$( $config.platform_subscription_ids -join '","')"] # Platform subscriptions (to be moved to workloads MG).
-workload_subscription_ids = ["$( $config.workload_subscription_ids -join '","')"] # Workload subscriptions (to be moved to workloads MG).
-core_management_group_id = "$($config.core_management_group_id)" # Desired ID for the top-level management group (under Tenant Root).
-core_management_group_display_name = "$($config.core_management_group_display_name)" # Display name for the top-level management group (under Tenant Root).
+# Create: Service Principal
+Write-Log -Level "SYS" -Message "Create: Service Principal: "
+Try{
+    $sp = az ad sp create-for-rbac --name "$servicePrincipalName" --role "Contributor" --scopes "/subscriptions/$($config.platform_subscription_ids[0])" --sdk-auth
+    Write-Host "PASS" -ForegroundColor Green
+}
+Catch{
+    Write-Host "FAIL" -ForegroundColor Red
+    Write-Log -Level "ERR" -Message " - Failed to create service principal. Please check configuration and try again."
+    exit 1
+}
+az ad sp create-for-rbac --name "$servicePrincipalName" --role "Contributor" --scopes "/subscriptions/YOUR_SUBSCRIPTION_ID"
 
-# Naming Settings (used for resource names).
-org_naming = {
-  prefix = "$($config.naming.prefix)" # Short name of organization ("abc").
-  project = "$($config.naming.project)" # Project name for related resources ("platform", "landingzone").
-  service = "$($config.naming.service)" # Service name used in the project ("iac", "mgt", "sec").
-  environment = "$($config.naming.environment)" # Environment for resources/project ("dev", "tst", "prd", "alz").
+# Create: Resource Group
+Write-Host -ForegroundColor Cyan "`r`n*** Deploying Azure Resources"
+Write-Log -Level "SYS" -Message "Create: Resource Group: "
+Try{
+    $rg = az group create --name "$resourceGroupName" --location "$($config.location)"
+    Write-Host "PASS" -ForegroundColor Green
+}
+Catch{
+    Write-Host "FAIL" -ForegroundColor Red
+    Write-Log -Level "ERR" -Message " - Failed to create resource group. Please check configuration and try again."
+    exit 1
 }
 
-# Tags (assigned to all bootstrap resources).
-org_tags = {
-  Project = "$($config.tags.Project)"
-  Environment = "$($config.tags.Environment)" # dev, tst, prd, alz
-  Owner = "$($config.tags.Owner)"
-  Creator = "$($config.tags.Creator)"
-  Created = "$(Get-Date -f 'yyyyMMdd.HHmm')"
+# Create: Storage Account
+Write-Log -Level "SYS" -Message "Create: Storage Account: "
+Try{
+    $sa = az storage account create --name "$storageAccountName" --resource-group "$resourceGroupName" `
+    --location "$($config.location)" --sku Standard_LRS --auth-mode login --kind StorageV2 
+    Write-Host "PASS" -ForegroundColor Green
+}
+Catch{
+    Write-Host "FAIL" -ForegroundColor Red
+    Write-Log -Level "ERR" -Message " - Failed to create storage account. Please check configuration and try again."
+    exit 1
 }
 
-# GitHub Settings.
-github_config = {
-  org = "$($config.github_config.org)" # Replace with your GitHub organization name.
-  repo = "$($config.github_config.repo)" # Replace with your GitHub repository name.
-  repo_desc = "$($config.github_config.repo_desc)" # Description for the GitHub repository.
-  branch = "$($config.github_config.branch)" # Replace with your GitHub repository name.
-  visibility = "$($config.github_config.visibility)" # Set to "public" or "private" as required.
+# Create: Blob Container
+Write-Log -Level "SYS" -Message "Create: Storage Container: "
+Try{
+    $ctn = az storage container create --name "$containerName" --account-name "$storageAccountName" --fail-on-exist
+    Write-Host "PASS" -ForegroundColor Green
 }
-"@
-Set-Content -Path ".\terraform\bootstrap\bootstrap.tfvars" -Value $terraformTFVARS -Force
-
-    Write-Log -Level "SYS" -Message "Performing Action: Initialize and apply Terraform configuration..."
-    Try{
-        Write-Host "APPLY" -ForegroundColor Green
-        Write-Log -Level "INF" -Message " - Initializing Terraform..."
-        terraform -chdir=terraform\bootstrap init -upgrade
-        Write-Log -Level "INF" -Message " - Running Terraform plan..."
-        terraform -chdir=terraform\bootstrap plan --out=bootstrap.tfplan -var-file="bootstrap.tfvars"
-        Write-Log -Level "WRN" -Message "The above plan will be applied to the target Azure tenant."
-        if(Get-UserConfirm){
-            Write-Log -Level "INF" -Message " - Running Terraform apply..."
-            terraform -chdir=terraform\bootstrap apply bootstrap.tfplan
-            Write-Log -Level "INF" -Message " - Bootstrap resources deployed successfully."
-        }
-        else{
-            Write-Log -Level "WRN" -Message " - Terraform apply aborted by user."
-            exit 1
-        }
-    }
-    Catch{
-        Write-Log -Level "ERR" -Message " - Terraform deployment failed. Please check configuration and try again."
-        exit 1
-    }
-} else{
-    ### DESTROY ###
-    Write-Log -Level "WRN" -Message "------------------------------------------------------"
-    Write-Log -Level "WRN" -Message "All resources deployed by this script will be removed."
-    Write-Log -Level "WRN" -Message "------------------------------------------------------"
-    if(Get-UserConfirm){
-        Try{
-            Write-Host "DESTROY" -ForegroundColor Green
-            Write-Log -Level "INF" -Message " - Initializing Terraform..."
-            terraform -chdir=terraform\bootstrap init -upgrade
-            Write-Log -Level "INF" -Message " - Running Terraform destroy..."
-            terraform -chdir=terraform\bootstrap destroy -var-file="bootstrap.tfvars" --auto-approve
-            Write-Log -Level "INF" -Message " - Resources destroyed successfully."
-            exit 0
-        }
-        Catch{
-            Write-Log -Level "ERR" -Message " - Terraform destroy failed. Please check configuration and try again."
-            exit 1
-        }
-    } else{
-        Write-Log -Level "WRN" -Message " - Terraform destroy aborted by user."
-        exit 1
-    }
+Catch{
+    Write-Host "FAIL" -ForegroundColor Red
+    Write-Log -Level "ERR" -Message " - Failed to create storage container. Please check configuration and try again."
+    exit 1
 }
