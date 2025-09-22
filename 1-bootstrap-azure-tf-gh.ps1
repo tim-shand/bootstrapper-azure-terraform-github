@@ -242,7 +242,6 @@ if($destroy) {
 
 # Execute Terraform Deployment.
 # Build out Terraform TFVARS file from local env.psd1 file and write to Terraform directory.
-Write-Log -Level "SYS" -Message "Terraform Configuration: Generating variables file: "
 $terraformTFVARS = @"
 # Azure Settings.
 azure_tenant_id = "$($config.azure_tenant_id)" # Target Azure tenant ID.
@@ -280,6 +279,7 @@ github_config = {
 "@
 Set-Content -Path ".\terraform\bootstrap\bootstrap.tfvars" -Value $terraformTFVARS -Force
 
+# Deploy bootstrap resources via Terraform.
 Write-Log -Level "SYS" -Message "Performing Action: Initialize and apply Terraform configuration..."
 Try{
     Write-Host "APPLY" -ForegroundColor Green
@@ -299,25 +299,12 @@ Try{
     }
 }
 Catch{
+    Write-Host "FAIL" -ForegroundColor Red
     Write-Log -Level "ERR" -Message " - Terraform deployment failed. Please check configuration and try again."
     exit 1
 }
 
 #=============================================#
-# MAIN: Clean Up
+# MAIN: Migrate State to Remote Backend
 #=============================================#
 
-# Remove temporary TF files.
-Write-Log -Level "SYS" -Message "Performing Action: Clean up temporary files..."
-Try{
-    Remove-Item -Path ".\terraform\bootstrap\bootstrap.tfvars" -Force -ErrorAction SilentlyContinue
-    Remove-Item -Path ".\terraform\bootstrap\bootstrap.tfplan" -Force -ErrorAction SilentlyContinue
-    #Remove-Item -Path ".\terraform\bootstrap\.terraform" -Recurse -Force -ErrorAction SilentlyContinue
-    #Remove-Item -Path ".\terraform\bootstrap\.terraform.lock.hcl" -Force -ErrorAction SilentlyContinue
-    #Remove-Item -Path ".\terraform\bootstrap\terraform.tfstate" -Force -ErrorAction SilentlyContinue
-    #Remove-Item -Path ".\terraform\bootstrap\terraform.tfstate.backup" -Force -ErrorAction SilentlyContinue
-    Write-Log -Level "INF" -Message " - Temporary files removed."
-}
-Catch{
-    Write-Log -Level "WRN" -Message " - Failed to remove some temporary files. Please remove manually."
-}
