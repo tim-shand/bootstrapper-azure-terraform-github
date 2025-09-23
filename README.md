@@ -6,13 +6,9 @@ _Automate the bootstrapping process for an existing Azure tenant, using Terrafor
 
 - Existing Azure tenant with at least **one** active subscription.
 - Local applications installed (Azure CLI, Github CLI, Terraform, Git).
-- Rename the `example.psd1` file to `env.psd1` and update the variable values within.
+- Rename the `example-env.psd1` file to `env.psd1` and update the variable values within.
 
 ## Process
-
-### Preparation
-- Check required applications are installed.
-- Check for active authenticated sessions (Azure CLI, Github CLI).
 
 ### Inputs
 - See `example-env.psd1` file for required variable values.
@@ -52,6 +48,6 @@ _Automate the bootstrapping process for an existing Azure tenant, using Terrafor
 
 ## To Do
 
-- Migrate local Terraform state to Azure.
-- Upload directory to Github once deployed.
-- Github Actions workflow (YML).
+- [ ] Migrate local Terraform state to Azure.
+- [ ] Upload directory to Github once deployed.
+- [ ] Github Actions workflow (YML).
