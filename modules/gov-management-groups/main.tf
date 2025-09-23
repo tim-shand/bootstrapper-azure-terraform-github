@@ -24,3 +24,9 @@ resource "azurerm_management_group" "mg_org_sandbox" {
   name         = "${var.org_naming["prefix"]}-sandbox-mg"
   parent_management_group_id = azurerm_management_group.mg_org_core.id
 }
+
+resource "azurerm_management_group" "mg_org_decom" {
+  display_name = "Decommissioned"
+  name         = "${var.org_naming["prefix"]}-decom-mg"
+  parent_management_group_id = azurerm_management_group.mg_org_core.id
+}
