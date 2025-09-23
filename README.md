@@ -4,8 +4,9 @@ _Automate the bootstrapping process for an existing Azure tenant, using Terrafor
 
 ## Requirements
 
-- Azure tenant with at least **one** active subscription.
+- Existing Azure tenant with at least **one** active subscription.
 - Local applications installed (Azure CLI, Github CLI, Terraform, Git).
+- Rename the `example.psd1` file to `env.psd1` and update the variable values within.
 
 ## Process
 
@@ -20,10 +21,10 @@ _Automate the bootstrapping process for an existing Azure tenant, using Terrafor
 
 ```powershell
 # Create resources.
-.\bootstrap-azure.ps1
+.\bootstrap-azure-tf-gh.ps1
 
 # Remove resources created by deployment.
-.\bootstrap-azure.ps1 -destroy $true
+.\bootstrap-azure-tf-gh.ps1 -destroy
 ```
 
 ### Actions
