@@ -29,8 +29,8 @@ param(
     [switch]$destroy # If set, will destroy all resources created by this script.
 )
 #$ErrorActionPreference = "Stop" # Set the error action preference to stop on errors.
-$workingDir = (Get-Location).Path # Current working directory.
-$envFile = "$workingDir\env.psd1" # Local variables file.
+$workingDir = "$((Get-Location).Path)\deployments\bootstrap" # Current working directory.
+$envFile = ".\env.psd1" # Local variables file.
 
 # Required applications.
 $requiredApps = @(
@@ -38,7 +38,6 @@ $requiredApps = @(
     [PSCustomObject]@{ Name = "Terraform"; Command = "terraform" }
     [PSCustomObject]@{ Name = "Git"; Command = "git" }
     [PSCustomObject]@{ Name = "GitHub CLI"; Command = "gh" }
-    #[PSCustomObject]@{ Name = "Fake App"; Command = "TestingTesting" }
 )
 
 #=============================================#
@@ -220,9 +219,9 @@ if($destroy) {
         Try{
             Write-Host "DESTROY" -ForegroundColor Green
             Write-Log -Level "INF" -Message " - Initializing Terraform..."
-            terraform -chdir=terraform\bootstrap init -upgrade
+            terraform -chdir="$($workingDir)" init -upgrade
             Write-Log -Level "INF" -Message " - Running Terraform destroy..."
-            terraform -chdir=terraform\bootstrap destroy -var-file="bootstrap.tfvars" --auto-approve
+            terraform -chdir="$($workingDir)" destroy -var-file="bootstrap.tfvars" --auto-approve
             Write-Log -Level "INF" -Message " - Resources destroyed successfully."
             exit 0
         }
@@ -237,7 +236,7 @@ if($destroy) {
 }
 
 #=============================================#
-# MAIN: Deploy Resources
+# MAIN: Generate TFVARS file for Terraform
 #=============================================#
 
 # Execute Terraform Deployment.
@@ -277,46 +276,57 @@ github_config = {
   visibility = "$($config.github_config.visibility)" # Set to "public" or "private" as required.
 }
 "@
-Set-Content -Path ".\terraform\bootstrap\bootstrap.tfvars" -Value $terraformTFVARS -Force
+Set-Content -Path "$($workingDir)\bootstrap.tfvars" -Value $terraformTFVARS -Force
 
-# Deploy bootstrap resources via Terraform.
-Write-Log -Level "SYS" -Message "Performing Action: Initialize and apply Terraform configuration..."
-Try{
-    Write-Host "APPLY" -ForegroundColor Green
-    Write-Log -Level "INF" -Message " - Initializing Terraform..."
-    terraform -chdir=terraform\bootstrap init -upgrade
-    Write-Log -Level "INF" -Message " - Running Terraform plan..."
-    terraform -chdir=terraform\bootstrap plan --out=bootstrap.tfplan -var-file="bootstrap.tfvars"
-    Write-Log -Level "WRN" -Message "The above plan will be applied to the target Azure tenant."
-    if(Get-UserConfirm){
-        Write-Log -Level "INF" -Message " - Running Terraform apply..."
-        terraform -chdir=terraform\bootstrap apply bootstrap.tfplan
-        Write-Log -Level "INF" -Message " - Bootstrap resources deployed successfully."
-    }
-    else{
-        Write-Log -Level "WRN" -Message " - Terraform apply aborted by user."
-        exit 1
-    }
-}
-Catch{
+#=============================================#
+# MAIN: Terrafrom Init & Apply
+#=============================================#
+
+# Terraform: Initialize
+Write-Log -Level "SYS" -Message "Performing Action: Initialize Terraform configuration... "
+if(terraform -chdir="$($workingDir)" init -upgrade){
+    Write-Host "PASS" -ForegroundColor Green
+} else{
     Write-Host "FAIL" -ForegroundColor Red
-    Write-Log -Level "ERR" -Message " - Terraform deployment failed. Please check configuration and try again."
+    Write-Log -Level "ERR" -Message " - Terraform initialization failed. Please check configuration and try again."
     exit 1
 }
 
-#=============================================#
-# MAIN: Migrate State to Remote Backend
-#=============================================#
-
-$tfBackendConfig = @"
-terraform {
-  backend "azurerm" {
-    resource_group_name  = "my-terraform-state-rg"
-    storage_account_name = "myterraformstateaccount"
-    container_name       = "tfstate"
-    key                  = "terraform.tfstate"
-  }
+# Terraform: Validate
+Write-Log -Level "SYS" -Message "Performing Action: Running Terraform validation... "
+if(terraform -chdir="$($workingDir)" validate){
+    Write-Host "PASS" -ForegroundColor Green
+} else{
+    Write-Host "FAIL" -ForegroundColor Red
+    Write-Log -Level "ERR" -Message " - Terraform validation failed. Please check configuration and try again."
+    exit 1
 }
-"@
-#Set-Content -Path ".\terraform\bootstrap\backend.tf" -Value $tfBackendConfig -Force
 
+# Terraform: Plan
+Write-Log -Level "SYS" -Message "Performing Action: Running Terraform plan... "
+if(terraform -chdir="$($workingDir)" plan --out=bootstrap.tfplan -var-file="bootstrap.tfvars"){
+    Write-Host "PASS" -ForegroundColor Green
+    # Show plan output.
+    terraform -chdir="$($workingDir)" show "$workingDir\bootstrap.tfplan"
+} else{
+    Write-Host "FAIL" -ForegroundColor Red
+    Write-Log -Level "ERR" -Message " - Terraform plan failed. Please check configuration and try again."
+    exit 1
+}
+
+# Terraform: Apply
+Write-Log -Level "WRN" -Message "Terraform will now deploy resources. This may take several minutes to complete."
+if(Get-UserConfirm){
+    Write-Log -Level "SYS" -Message "Performing Action: Running Terraform deployment... "
+    if(terraform -chdir="$($workingDir)" apply bootstrap.tfplan){
+        Write-Host "PASS" -ForegroundColor Green
+    } else{
+        Write-Host "FAIL" -ForegroundColor Red
+        Write-Log -Level "ERR" -Message " - Terraform plan failed. Please check configuration and try again."
+        exit 1
+    }
+}
+else{
+    Write-Log -Level "WRN" -Message " - Terraform apply aborted by user."
+    exit 1
+}

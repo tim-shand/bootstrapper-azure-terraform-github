@@ -4,8 +4,6 @@ resource "random_integer" "rndint" {
   max = 99999
 }
 
-data "azuread_client_config" "current" {} # Get current AZ session info.
-
 # Dynamically truncate string to a specified maximum length (max 24 chars for SA name).
 locals {
   sa_name_max_length = 19 # Random integer suffix will add 5 chars, so max = 19 for base name.
@@ -14,13 +12,7 @@ locals {
   sa_name_final      = "${local.sa_name_truncated}${random_integer.rndint.result}"
 }
 
-# Create Resource Group, Storage Account, Storage Container, and Key Vault.
-resource "azurerm_resource_group" "tf_rg" {
-  name     = "${var.org_naming["prefix"]}-${var.org_naming["project"]}-${var.org_naming["service"]}-rg"
-  location = var.location
-  tags     = var.org_tags
-}
-
+# Storage Account.
 resource "azurerm_storage_account" "tf_sa" {
   name                     = local.sa_name_final 
   resource_group_name      = azurerm_resource_group.tf_rg.name
@@ -31,6 +23,7 @@ resource "azurerm_storage_account" "tf_sa" {
   tags                     = var.org_tags
 }
 
+# Storage Container.
 resource "azurerm_storage_container" "tf_sc" {
   name                  = "${var.org_naming["project"]}-${var.org_naming["service"]}-tfstate"
   storage_account_id    = azurerm_storage_account.tf_sa.id
@@ -48,5 +41,5 @@ resource "azurerm_role_assignment" "rbac_sa_ga1" {
 resource "azurerm_role_assignment" "rbac_sa_iac" {
   scope                = azurerm_storage_account.tf_sa.id
   role_definition_name = "Storage Blob Data Contributor"
-  principal_id         = var.service_principal_object_id
+  principal_id         = azuread_service_principal.entra_iac_sp.object_id
 }

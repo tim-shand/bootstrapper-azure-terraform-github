@@ -1,56 +1,50 @@
 # Create Github Repository (requires auth'd Github CLI session).
 resource "github_repository" "gh_repo" {
   name          = var.github_config["repo"]
-  description   = "Azure: Bootstrap platform Landing Zone (Basic)"
+  description   = "Azure: Platform Landing Zone - Infrastructure as Code"
   visibility    = "private"
 }
 
-# Add Federated Identity Credential for GitHub OIDC to Github.
+# Github: Secrets - Add Federated Identity Credential for OIDC.
 resource "github_actions_secret" "gh_tenant_id" {
-  repository      = var.github_config["repo"]
+  repository      = github_repository.gh_repo.name
   secret_name     = "ARM_TENANT_ID"
   plaintext_value = var.azure_tenant_id
-  depends_on = [ github_repository.gh_repo ]
 }
 
 resource "github_actions_secret" "gh_subscription_id" {
-  repository      = var.github_config["repo"]
+  repository      = github_repository.gh_repo.name
   secret_name     = "ARM_SUBSCRIPTION_ID"
-  plaintext_value = var.platform_sub_id
-  depends_on = [ github_repository.gh_repo ]
+  plaintext_value = var.platform_subscription_ids[0] # Primary platform subscription ID.
 }
 
 resource "github_actions_secret" "gh_client_id" {
-  repository      = var.github_config["repo"]
+  repository      = github_repository.gh_repo.name
   secret_name     = "ARM_CLIENT_ID"
-  plaintext_value = var.sp_oidc_appid # App ID of the Service Principal.
-  depends_on = [ github_repository.gh_repo ]
+  plaintext_value = var.tf_entraid_sp_id # Service Principal federated credential ID.
 }
 
 resource "github_actions_secret" "gh_use_oidc" {
-  repository      = var.github_config["repo"]
-  secret_name     = "ARM_USE_OIDC"
+  repository      = github_repository.gh_repo.name
+  secret_name     = "ARM_USE_OIDC" # Must be set to "true" to use OIDC.
   plaintext_value = "true"
-  depends_on = [ github_repository.gh_repo ]
 }
 
+# Github: Variables - Terraform Backend details.
 resource "github_actions_variable" "gh_var_tf_rg" {
-  repository       = var.github_config["repo"]
+  repository       = github_repository.gh_repo.name
   variable_name    = "TF_BACKEND_RG_NAME"
   value            = var.tf_backend_rg_name
-  depends_on = [ github_repository.gh_repo ]
 }
 
 resource "github_actions_variable" "gh_var_tf_sa" {
-  repository       = var.github_config["repo"]
+  repository       = github_repository.gh_repo.name
   variable_name    = "TF_BACKEND_SA_NAME"
   value            = var.tf_backend_sa_name
-  depends_on = [ github_repository.gh_repo ]
 }
 
 resource "github_actions_variable" "gh_var_tf_cn" {
-  repository       = var.github_config["repo"]
+  repository       = github_repository.gh_repo.name
   variable_name    = "TF_BACKEND_CN_NAME"
   value            = var.tf_backend_cn_name
-  depends_on = [ github_repository.gh_repo ]
 }

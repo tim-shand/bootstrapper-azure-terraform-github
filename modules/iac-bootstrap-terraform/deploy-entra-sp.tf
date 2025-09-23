@@ -1,22 +1,19 @@
-# Create Entra ID group for IaC accounts.
-
-data "azuread_client_config" "current" {} # Get current AZ session info.
-
 # Create App Registration and Service Principal for Terraform.
 resource "azuread_application" "entra_iac_app" {
   display_name     = "${var.org_naming["prefix"]}-${var.org_naming["project"]}-${var.org_naming["service"]}-sp"
-  logo_image       = filebase64("../modules/idn-terraform-serviceprincipal/logo.png")
+  logo_image       = filebase64("../../modules/iac-bootstrap-terraform/tf-logo.png")
   owners           = [data.azuread_client_config.current.object_id]
   notes            = "System: Service Principal for IaC (Terraform)."
 }
 
+# Create Service Principal for the App Registration.
 resource "azuread_service_principal" "entra_iac_sp" {
   client_id                    = azuread_application.entra_iac_app.client_id
   app_role_assignment_required = false
   owners                       = [data.azuread_client_config.current.object_id]
 }
 
-# Create federated credential for Service Principal.
+# Create federated credential for Service Principal (to be used with GitHub OIDC).
 resource "azuread_application_federated_identity_credential" "entra_iac_app_cred" {
   application_id = azuread_application.entra_iac_app.id
   display_name   = "GithubActions-OIDC"

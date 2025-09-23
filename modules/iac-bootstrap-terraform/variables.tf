@@ -1,5 +1,6 @@
 # Bootstrap: Variables for Terraform Remote Backend in Azure.
 
+# General ----------------------------------#
 variable "azure_tenant_id" {
   description = "The Azure Tenant ID to deploy resources into."
   type        = string
@@ -23,7 +24,14 @@ variable "org_tags" {
   default     = {}
 }
 
-variable "service_principal_object_id" {
-  description = "The object ID of the Service Principal to assign roles to."
+# Management Group ----------------------------------#
+variable "core_mg_id" {
+  description = "The ID of the core management group. Used for assigning RBAC."
   type        = string
+}
+
+# Github ----------------------------------#
+variable "github_config" {
+  description = "Map of Github configuration settings."
+  type = map(string)
 }
