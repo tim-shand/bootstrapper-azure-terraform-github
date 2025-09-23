@@ -218,6 +218,7 @@ if($destroy) {
     if(Get-UserConfirm){
         Try{
             Write-Host "DESTROY" -ForegroundColor Green
+            terraform -chdir="$($workingDir)" state pull > $($workingDir)\bootstrap.tfstate
             Write-Log -Level "INF" -Message " - Initializing Terraform..."
             terraform -chdir="$($workingDir)" init -upgrade
             Write-Log -Level "INF" -Message " - Running Terraform destroy..."
@@ -325,6 +326,52 @@ if(Get-UserConfirm){
         Write-Log -Level "ERR" -Message " - Terraform plan failed. Please check configuration and try again."
         exit 1
     }
+}
+else{
+    Write-Log -Level "WRN" -Message " - Terraform apply aborted by user."
+    exit 1
+}
+
+#=============================================#
+# MAIN: Terrafrom Migrate State
+#=============================================#
+
+# Get Github variables from Terraform output.
+# $tf_rg = terraform -chdir=deployments/bootstrap output -raw tf_backend_rg_name
+Write-Log -Level "SYS" -Message "Retrieving Terraform backend details from output... "
+Try{
+    $tf_rg = terraform -chdir="$($workingDir)" output -raw tf_backend_rg_name
+    $tf_sa = terraform -chdir="$($workingDir)" output -raw tf_backend_sa_name
+    $tf_cn = terraform -chdir="$($workingDir)" output -raw tf_backend_cn_name
+    Write-Host "PASS" -ForegroundColor Green
+    Write-Log -Level "INF" -Message " - Terraform backend details retrieved successfully."
+}
+Catch{
+    Write-Host "FAIL" -ForegroundColor Red
+    Write-Log -Level "ERR" -Message " - Failed to get Terraform output values. Please check configuration and try again."
+    exit 1
+}
+
+# Generate backend config file for state migration.
+$backendConfig = @"
+    terraform {
+      backend "azurerm" {
+        resource_group_name  = "$($tf_rg)"
+        storage_account_name = "$($tf_sa)"
+        container_name       = "$($tf_cn)"
+        key                  = "bootstrap.tfstate"
+      }
+    }
+"@
+Set-Content -Path "$($workingDir)\backend.tf" -Value $backendConfig -Force
+
+# Terraform: Migrate State
+Write-Log -Level "WRN" -Message "Terraform will now migrate state to Azure."
+if(Get-UserConfirm){
+    terraform -chdir="$($workingDir)" init -migrate-state
+    # Cleanup temporary files.
+    Remove-Item -Path "$($workingDir)\backend.tf" -Force
+    Remove-Item -Path "$($workingDir)\bootstrap.tfplan" -Force
 }
 else{
     Write-Log -Level "WRN" -Message " - Terraform apply aborted by user."
