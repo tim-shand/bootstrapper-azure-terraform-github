@@ -43,4 +43,4 @@ _Automate the bootstrapping process for an existing Azure tenant, using Terrafor
 - Migrate local Terraform state to Azure.
 - Upload directory to Github once deployed.
 - Github Actions workflow (YML).
-- Add example file `example-env.psd1`.
+
