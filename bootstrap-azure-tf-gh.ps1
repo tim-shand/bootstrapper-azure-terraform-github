@@ -161,15 +161,17 @@ if (-not $azSession) {
     } else{
         Write-Log -Level "INF" -Message " - Current session tenant ID matches intended target: $($config.azure_tenant_id)"
         if( -not( $($azSession.name) -eq "$($config.naming.prefix)-$($config.naming.project)-$($config.naming.environment)-sub") ){
-            Try{
-                # Rename default subscription as platform landing zone.
-                Write-Log -Level "INF" -Message " - Setting subscription name to: $($config.naming.prefix)-$($config.naming.project)-$($config.naming.environment)-sub [$($azSession.id)]"
-                $subRename = az account subscription rename --subscription-id "$($config.platform_subscription_ids[0])" `
-                --name "$($config.naming.prefix)-$($config.naming.project)-$($config.naming.environment)-sub" --only-show-errors
-                $subRename | Out-Null
-            }
-            Catch{
-                Write-Log -Level "WRN" -Message " - Failed to rename subscription. Please check permissions and try again. Skip."
+            if(-not $destroy){
+                Try{
+                    # Rename default subscription as platform landing zone.
+                    Write-Log -Level "INF" -Message " - Setting subscription name to: $($config.naming.prefix)-$($config.naming.project)-$($config.naming.environment)-sub [$($azSession.id)]"
+                    $subRename = az account subscription rename --subscription-id "$($config.platform_subscription_ids[0])" `
+                    --name "$($config.naming.prefix)-$($config.naming.project)-$($config.naming.environment)-sub" --only-show-errors
+                    $subRename | Out-Null
+                }
+                Catch{
+                    Write-Log -Level "WRN" -Message " - Failed to rename subscription. Please check permissions and try again. Skip."
+                }
             }
         }
     }
@@ -186,24 +188,26 @@ if (-not $ghSession) {
     Write-Host "PASS" -ForegroundColor Green
     Write-Log -Level "INF" -Message " - Github CLI logged in as: $($ghSession.login) [$($ghSession.html_url)]"
     # Check if provided repo exists, prompt to remove it as it will be re-created by Terraform.
-    $repoCheck = (gh repo list --json name | ConvertFrom-JSON)
-    if ($repoCheck | Where-Object {$_.name -eq "$($config.github_config.org)/$($config.github_config.repo)"} ) {
-        Write-Log -Level "WRN" -Message " - Repository '$($config.github_config.org)/$($config.github_config.repo)' already exists."
-        Write-Log -Level "WRN" -Message " - This repository must be removed and re-created by Terraform to ensure proper configuration."
-        Write-Log -Level "WRN" -Message " - If you cannot remove this repository, please provide a different repository name. Overwrite?"
-        if(Get-UserConfirm){
-            try{
-                gh repo delete "$($config.github_config.org)/$($config.github_config.repo)" --yes
-                Write-Log -Level "INF" -Message " - Repository '$($config.github_config.org)/$($config.github_config.repo)' removed successfully."
+    if(-not $destroy){
+        $repoCheck = (gh repo list --json name | ConvertFrom-JSON)
+        if ($repoCheck | Where-Object {$_.name -eq "$($config.github_config.repo)"} ) {
+            Write-Log -Level "WRN" -Message " - Repository '$($config.github_config.org)/$($config.github_config.repo)' already exists."
+            Write-Log -Level "WRN" -Message " - This repository must be removed and re-created to ensure proper configuration."
+            Write-Log -Level "WRN" -Message " - If you cannot remove this repository, please provide a different repository name. Overwrite?"
+            if(Get-UserConfirm){
+                try{
+                    gh repo delete "$($config.github_config.org)/$($config.github_config.repo)" --yes
+                    Write-Log -Level "INF" -Message " - Repository '$($config.github_config.org)/$($config.github_config.repo)' removed successfully."
+                }
+                catch{
+                    Write-Log -Level "ERR" -Message " - Failed to remove GitHub repository. Please check configuration and try again."
+                    exit 1
+                }
             }
-            catch{
-                Write-Log -Level "ERR" -Message " - Failed to delete GitHub repository. Please check configuration and try again."
+            else{
+                Write-Log -Level "ERR" -Message " - Repository deletion aborted. Please remove manually, or provide a different name and try again."
                 exit 1
             }
-        }
-        else{
-            Write-Log -Level "ERR" -Message " - Repository deletion aborted. Please remove manually, or provide a different name and try again."
-            exit 1
         }
     }
 }
@@ -218,7 +222,9 @@ if($destroy) {
     if(Get-UserConfirm){
         Try{
             Write-Host "DESTROY" -ForegroundColor Green
-            terraform -chdir="$($workingDir)" state pull > $($workingDir)\terraform.tfstate
+            # Remove Github repository first, as it contains the Github Actions secrets/variables used for Terraform.
+            #gh repo delete "$($config.github_config.org)/$($config.github_config.repo)" --yes
+            
             Write-Log -Level "INF" -Message " - Initializing Terraform..."
             terraform -chdir="$($workingDir)" init -upgrade
             Write-Log -Level "INF" -Message " - Running Terraform destroy..."

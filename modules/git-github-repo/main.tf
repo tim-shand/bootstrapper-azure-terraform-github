@@ -1,4 +1,9 @@
 # Create Github Repository (requires auth'd Github CLI session).
+
+# data "github_repository" "gh_repo" {
+#   full_name = "${var.github_config["org"]}/${var.github_config["repo"]}"
+# }
+
 resource "github_repository" "gh_repo" {
   name          = var.github_config["repo"]
   description   = "Azure: Platform Landing Zone - Infrastructure as Code"
@@ -7,13 +12,13 @@ resource "github_repository" "gh_repo" {
 
 # Github: Secrets - Add Federated Identity Credential for OIDC.
 resource "github_actions_secret" "gh_tenant_id" {
-  repository      = github_repository.gh_repo.name
+  repository      = github_repository.gh_repo.name # data.github_repository.gh_repo.name
   secret_name     = "ARM_TENANT_ID"
   plaintext_value = var.azure_tenant_id
 }
 
 resource "github_actions_secret" "gh_subscription_id" {
-  repository      = github_repository.gh_repo.name
+  repository      = github_repository.gh_repo.name # var.github_config["repo"]
   secret_name     = "ARM_SUBSCRIPTION_ID"
   plaintext_value = var.platform_subscription_ids[0] # Primary platform subscription ID.
 }
