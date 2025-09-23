@@ -13,6 +13,7 @@ env.psd1
 *.tfstate
 *.tfstate.*
 .terraform.lock.hcl 
+backend.tf
 
 # Terraform variable files (potentially sensitive)
 *.tfvars

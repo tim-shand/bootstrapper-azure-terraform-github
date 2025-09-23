@@ -332,6 +332,8 @@ else{
     exit 1
 }
 
+
+
 #=============================================#
 # MAIN: Terrafrom Migrate State
 #=============================================#
@@ -370,7 +372,7 @@ Write-Log -Level "WRN" -Message "Terraform will now migrate state to Azure."
 if(Get-UserConfirm){
     terraform -chdir="$($workingDir)" init -migrate-state
     # Cleanup temporary files.
-    Remove-Item -Path "$($workingDir)\backend.tf" -Force
+    #Remove-Item -Path "$($workingDir)\backend.tf" -Force
     Remove-Item -Path "$($workingDir)\bootstrap.tfplan" -Force
 }
 else{
