@@ -218,7 +218,7 @@ if($destroy) {
     if(Get-UserConfirm){
         Try{
             Write-Host "DESTROY" -ForegroundColor Green
-            terraform -chdir="$($workingDir)" state pull > $($workingDir)\bootstrap.tfstate
+            terraform -chdir="$($workingDir)" state pull > $($workingDir)\terraform.tfstate
             Write-Log -Level "INF" -Message " - Initializing Terraform..."
             terraform -chdir="$($workingDir)" init -upgrade
             Write-Log -Level "INF" -Message " - Running Terraform destroy..."
