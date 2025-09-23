@@ -25,10 +25,7 @@ This script performs the following tasks:
 #=============================================#
 
 # General Settings.
-param(
-    [switch]$destroy # If set, will destroy all resources created by this script.
-)
-#$ErrorActionPreference = "Stop" # Set the error action preference to stop on errors.
+$ErrorActionPreference = "Stop" # Set the error action preference to stop on errors.
 $workingDir = "$((Get-Location).Path)\deployments\bootstrap" # Current working directory.
 $envFile = ".\env.psd1" # Local variables file.
 
@@ -188,57 +185,25 @@ if (-not $ghSession) {
     Write-Host "PASS" -ForegroundColor Green
     Write-Log -Level "INF" -Message " - Github CLI logged in as: $($ghSession.login) [$($ghSession.html_url)]"
     # Check if provided repo exists, prompt to remove it as it will be re-created by Terraform.
-    if(-not $destroy){
-        $repoCheck = (gh repo list --json name | ConvertFrom-JSON)
-        if ($repoCheck | Where-Object {$_.name -eq "$($config.github_config.repo)"} ) {
-            Write-Log -Level "WRN" -Message " - Repository '$($config.github_config.org)/$($config.github_config.repo)' already exists."
-            Write-Log -Level "WRN" -Message " - This repository must be removed and re-created to ensure proper configuration."
-            Write-Log -Level "WRN" -Message " - If you cannot remove this repository, please provide a different repository name. Overwrite?"
-            if(Get-UserConfirm){
-                try{
-                    gh repo delete "$($config.github_config.org)/$($config.github_config.repo)" --yes
-                    Write-Log -Level "INF" -Message " - Repository '$($config.github_config.org)/$($config.github_config.repo)' removed successfully."
-                }
-                catch{
-                    Write-Log -Level "ERR" -Message " - Failed to remove GitHub repository. Please check configuration and try again."
-                    exit 1
-                }
+    $repoCheck = (gh repo list --json name | ConvertFrom-JSON)
+    if ($repoCheck | Where-Object {$_.name -eq "$($config.github_config.repo)"} ) {
+        Write-Log -Level "WRN" -Message " - Repository '$($config.github_config.org)/$($config.github_config.repo)' already exists."
+        Write-Log -Level "WRN" -Message " - This repository must be removed and re-created to ensure proper configuration."
+        Write-Log -Level "WRN" -Message " - If you cannot remove this repository, please provide a different repository name. Overwrite?"
+        if(Get-UserConfirm){
+            try{
+                gh repo delete "$($config.github_config.org)/$($config.github_config.repo)" --yes
+                Write-Log -Level "INF" -Message " - Repository '$($config.github_config.org)/$($config.github_config.repo)' removed successfully."
             }
-            else{
-                Write-Log -Level "ERR" -Message " - Repository deletion aborted. Please remove manually, or provide a different name and try again."
+            catch{
+                Write-Log -Level "ERR" -Message " - Failed to remove GitHub repository. Please check configuration and try again."
                 exit 1
             }
         }
-    }
-}
-
-#=============================================#
-# MAIN: DESTROY Resources
-#=============================================#
-if($destroy) {
-    Write-Log -Level "WRN" -Message "------------------------------------------------------"
-    Write-Log -Level "WRN" -Message "All resources deployed by this script will be removed."
-    Write-Log -Level "WRN" -Message "------------------------------------------------------"
-    if(Get-UserConfirm){
-        Try{
-            Write-Host "DESTROY" -ForegroundColor Green
-            # Remove Github repository first, as it contains the Github Actions secrets/variables used for Terraform.
-            #gh repo delete "$($config.github_config.org)/$($config.github_config.repo)" --yes
-            
-            Write-Log -Level "INF" -Message " - Initializing Terraform..."
-            terraform -chdir="$($workingDir)" init -upgrade
-            Write-Log -Level "INF" -Message " - Running Terraform destroy..."
-            terraform -chdir="$($workingDir)" destroy -var-file="bootstrap.tfvars" --auto-approve
-            Write-Log -Level "INF" -Message " - Resources destroyed successfully."
-            exit 0
-        }
-        Catch{
-            Write-Log -Level "ERR" -Message " - Terraform destroy failed. Please check configuration and try again."
+        else{
+            Write-Log -Level "ERR" -Message " - Repository deletion aborted. Please remove manually, or provide a different name and try again."
             exit 1
         }
-    } else{
-        Write-Log -Level "WRN" -Message " - Terraform destroy aborted by user."
-        exit 1
     }
 }
 
@@ -337,8 +302,6 @@ else{
     Write-Log -Level "WRN" -Message " - Terraform apply aborted by user."
     exit 1
 }
-
-
 
 #=============================================#
 # MAIN: Terrafrom Migrate State
