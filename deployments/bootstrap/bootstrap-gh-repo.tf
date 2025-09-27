@@ -1,3 +1,7 @@
+#---------------------------------------------------#
+# Github Repository & Variables/Secrets
+#---------------------------------------------------#
+
 resource "github_repository" "gh_repo" {
   name          = var.github_config["repo"]
   description   = "Azure: Platform Landing Zone - Infrastructure as Code"
