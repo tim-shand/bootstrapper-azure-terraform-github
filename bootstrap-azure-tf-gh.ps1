@@ -157,7 +157,7 @@ Try{
         $repoCheck = (gh repo list --json name | ConvertFrom-JSON)
         if ($repoCheck | Where-Object {$_.name -eq "$($config.github_config.repo)"} ) {
             Write-Log -Level "WRN" -Message "- Repository '$($gh_org)/$($config.github_config.repo)' already exists."
-            Write-Log -Level "WRN" -Message "- This repository must be removed and re-created to ensure proper configuration."
+            Write-Log -Level "WRN" -Message "- If this repository was created outside of this process, it must be removed and re-created to ensure proper configuration."
             Write-Log -Level "WRN" -Message "- If you do not wish to remove this repository, update repository name in variables file. Overwrite?"
             if(Get-UserConfirm){
                 Try{
@@ -303,19 +303,27 @@ if(terraform -chdir="$($workingDir)" validate){
 
 if($destroy){
     # Terraform: Destroy
-    Write-Log -Level "SYS" -Message "Performing Action: Running Terraform deployment... "
-    if(terraform -chdir="$($workingDir)" destroy --auto-approve `
-        -var-file="bootstrap.tfvars" `
-        -var="azure_tenant_id=$($azSession.tenantId)" `
-        -var="platform_subscription_id=$($azSession.id)" `
-        -var="github_org=$($gh_org)"
-    ){
-        Write-Host "PASS" -ForegroundColor Green
-        Write-Host -ForegroundColor Cyan "`r`n*** Bootstrap Removal Complete! ***`r`n"
-    } else{
-        Write-Host "FAIL" -ForegroundColor Red
-        Write-Log -Level "ERR" -Message "- Terraform plan failed. Please check configuration and try again."
+
+    Write-Log -Level "WRN" -Message "Terraform will now remove all bootstrap resources. This may take several minutes to complete."
+    if(-not (Get-UserConfirm) ){
+        Write-Log -Level "ERR" -Message "User aborted process. Please confirm intended configuration and try again."
         exit 1
+    }
+    else{
+        Write-Log -Level "SYS" -Message "Performing Action: Running Terraform destroy... "
+        if(terraform -chdir="$($workingDir)" destroy --auto-approve `
+            -var-file="bootstrap.tfvars" `
+            -var="azure_tenant_id=$($azSession.tenantId)" `
+            -var="platform_subscription_id=$($azSession.id)" `
+            -var="github_org=$($gh_org)"
+        ){
+            Write-Host "PASS" -ForegroundColor Green
+            Write-Host -ForegroundColor Cyan "`r`n*** Bootstrap Removal Complete! ***`r`n"
+        } else{
+            Write-Host "FAIL" -ForegroundColor Red
+            Write-Log -Level "ERR" -Message "- Terraform plan failed. Please check configuration and try again."
+            exit 1
+        }
     }
 }
 else{
@@ -339,20 +347,25 @@ else{
     if(Test-Path -Path "$workingDir\bootstrap.tfplan"){
         Write-Host ""
         Write-Log -Level "WRN" -Message "Terraform will now deploy resources. This may take several minutes to complete."
-        Write-Log -Level "SYS" -Message "Performing Action: Running Terraform apply... "
-        if(terraform -chdir="$($workingDir)" apply bootstrap.tfplan){
-            Write-Host "PASS" -ForegroundColor Green
-            Write-Host -ForegroundColor Cyan "`r`n*** Bootstrap Deployment Complete! ***`r`n"
-        } else{
-            Write-Host "FAIL" -ForegroundColor Red
-            Write-Log -Level "ERR" -Message "- Terraform plan failed. Please check configuration and try again."
+        if(-not (Get-UserConfirm) ){
+            Write-Log -Level "ERR" -Message "User aborted process. Please confirm intended configuration and try again."
             exit 1
+        }
+        else{
+            Write-Log -Level "SYS" -Message "Performing Action: Running Terraform apply... "
+            if(terraform -chdir="$($workingDir)" apply bootstrap.tfplan){
+                Write-Host "PASS" -ForegroundColor Green
+                Write-Host -ForegroundColor Cyan "`r`n*** Bootstrap Deployment Complete! ***`r`n"
+            } else{
+                Write-Host "FAIL" -ForegroundColor Red
+                Write-Log -Level "ERR" -Message "- Terraform plan failed. Please check configuration and try again."
+                exit 1
+            }
         }
     } else{
         Write-Log -Level "ERR" -Message "- Terraform plan file missing! Please check configuration and try again."
         exit 1  
     }
-
 }
 
 #================================================#
