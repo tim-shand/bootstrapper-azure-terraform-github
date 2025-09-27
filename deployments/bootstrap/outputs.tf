@@ -31,3 +31,10 @@ output "tf_backend_cn_name" {
   description = "The name of the Container for the Terraform backend."
   value = azurerm_storage_container.tf_sc.name
 }
+
+# GitHub
+output "github_repository_name" {
+  description       = "GitHub repository name."
+  value             = github_repository.gh_repo.name
+  sensitive         = false
+}
