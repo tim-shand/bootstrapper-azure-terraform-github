@@ -6,7 +6,7 @@ variable "azure_tenant_id" {
   type        = string
 }
 
-variable "platform_subscription_ids" {
+variable "platform_subscription_id" {
   description = "A list of platform subscription IDs for the management group structure."
   type        = list(string)
 }

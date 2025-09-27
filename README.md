@@ -10,6 +10,19 @@ _Automate the bootstrapping process for an existing Azure tenant, using Terrafor
 
 ## Inputs
 - See `example-env.psd1` file for required variable values.
+- Azure Tenant and subscription ID are obtained from current authenticated AzureCLI session.
+- Before running the bootstrap script, ensure you are authenticated with the correct target tenant and subscription set.
+
+```bash
+# Get current Azure session details.
+az account show --output table
+
+# Display all available subscriptions.
+az account list --output table
+
+# Change subscription ID
+az account set --subscription 1234-5678-1234-5678-1234
+```
 
 ## Usage
 
@@ -21,30 +34,33 @@ _Automate the bootstrapping process for an existing Azure tenant, using Terrafor
 .\bootstrap-azure-tf-gh.ps1 -destroy
 ```
 
-## Actions
+## Actions Performed
 
-### Pre-Checks
-- Checks for required applications (Git, Github CLI, Azure CLI, Terraform).
-- Validates Azure CLI and Github CLI authentication. 
+### Stage 1: Validation and Checks
 
-### Implementation
-- Renames provided Azure platform subscription (list item 0) to match naming convention.
-- Builds Terraform TFVARS file from Powershell using "env.psd1" variables file.
-- Executes Terraform init, validate and plan.
-- Presents Terraform plan and prompts users to confirm deployment.
+- [x] Check for required applications.
+- [x] Check for local env.psd1 file.
+- [x] Check Azure CLI authentication.
+- [x] Check Github CLI authentication.
 
-### Deployment
-- Creates basic Management Group structure.
-- Creates Resources for remote Terraform backend (Resource Group, Storage Account, Container).
-- Creates Service Principal with OIDC (Federated) credential in Github.
-- Assign RBAC 'Contributor' for Service Principal to 'Core' Management Group.
-- Add OIDC details and Terraform backend details to Github Actions Secrets/Variables.
+### Stage 2: Bootstrap Deployment
 
-### Migration
-- Migrate Terraform state to remote backend in Azure.
-- Commit Terraform and Powershell files to created Github repo.
+- [x] Create Core Management Group (top-level under tenant root).
+- [x] Move platform subscription to `Core` Management Group.
+- [x] Create Azure Service Principal with `Contributor` RBAC role on Core MG.
+- [x] Create Service Principal with OIDC (Federated) credential for Github.
+- [x] Create Resource Group, Storage Account, Storage Container for Terraform remote backend.
+- [x] Assign RBAC role `Storage Blob Data Contributor` on Storage Account for Service Principal.
+- [x] Create Github repository using current GH CLI session data.
 
-## To Do
+### Stage 3: Migration Process
 
-- [ ] Upload directory to Github once deployed.
-- [ ] Github Actions workflow (YML).
+- [x] Add OIDC and Terraform backend details to Github Actions Secrets/Variables.
+- [ ] Builds Terraform TFVARS file from Powershell using "env.psd1" variables file.
+- [ ] Executes Terraform init, validate and plan.
+- [ ] Presents Terraform plan and prompts users to confirm deployment.
+
+### Stage 4: Clean Up
+
+- [ ] Remove all locally created temporary files.
+- [ ] Commit Terraform and Powershell files to created Github repo.

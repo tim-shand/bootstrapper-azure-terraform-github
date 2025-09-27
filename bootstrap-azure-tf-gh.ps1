@@ -7,27 +7,28 @@
 Bootstrap script to prepare Azure tenant for management via Terraform and Github Actions.
 This script performs the following tasks:
 - Checks for required local applications (Azure CLI, Terraform, Git, GitHub CLI).
-- Checks for local environment variables file and imports configuration.
-- Validates Azure CLI authentication and intended Azure tenant ID matches current session.
+- Checks for local environment variables file (env.psd1) and imports configuration.
+- Validates Azure CLI authentication, used Azure tenant ID and subscription from current session.
 - Validates Github CLI authentication, confirms provided repo name is available (prompts to delete if exists).
-- Creates Azure resources for remote Terraform backend.
 - Generates Terraform variable file (TFVARS) from local environment variables.
-- Initializes and applies Terraform configuration to create base resources in Azure.
-- Adds bootstrap script and Terraform files into the Github repo.
+- Initializes and applies Terraform configuration to create bootstrap resources in Azure.
+- Adds bootstrap script and Terraform files into the provided Github repo.
 
 # USAGE:
-.\bootstrap-azure-tf-gh.ps1
-.\bootstrap-azure-tf-gh.ps1 -destroy
+.\bootstrap-azure-tf-gh.ps1 -envfile ".\env.psd1"
+.\bootstrap-azure-tf-gh.ps1 -envfile ".\env.psd1" -destroy
 #>
 
 #=============================================#
 # VARIABLES
 #=============================================#
 
-# General Settings.
-$ErrorActionPreference = "Stop" # Set the error action preference to stop on errors.
-$workingDir = "$((Get-Location).Path)\deployments\bootstrap" # Current working directory.
-$envFile = ".\env.psd1" # Local variables file.
+# General Settings/Variables.
+param(
+    [switch]$destroy, # Add switch parameter for delete option.
+    [Parameter(Mandatory=$true)][string]$envFile # Local variables file ".\env.psd1".
+)
+$workingDir = "$((Get-Location).Path)\deployments\bootstrap" # Working directory for Terraform files
 
 # Required applications.
 $requiredApps = @(
@@ -36,6 +37,24 @@ $requiredApps = @(
     [PSCustomObject]@{ Name = "Git"; Command = "git" }
     [PSCustomObject]@{ Name = "GitHub CLI"; Command = "gh" }
 )
+
+# Determine request action and populate hashtable for logging purposes.
+if($destroy){
+    $sys_action = @{
+        do = "Remove"
+        past = "Removed"
+        current = "Removing"
+        colour = "Magenta"
+    }
+}
+else{
+    $sys_action = @{
+        do = "Create"
+        past = "Created"
+        current= "Creating"
+        colour = "Green"
+    }
+}
 
 #=============================================#
 # FUNCTIONS
@@ -76,11 +95,11 @@ function Get-UserConfirm {
                 return $true
             }
             "^(n|no)$" {
-                Write-Log -Level "WRN" -Message " - User declined to proceed."
+                Write-Log -Level "WRN" -Message "- User declined to proceed."
                 return $false
             }
             default {
-                Write-Log -Level "WRN" -Message " - Invalid response. Please enter [Y/Yes/N/No]."
+                Write-Log -Level "WRN" -Message "- Invalid response. Please enter [Y/Yes/N/No]."
             }
         }
     }
@@ -95,164 +114,168 @@ Clear-Host
 Write-Host -ForegroundColor Cyan "`r`n==========================================================================="
 Write-Host -ForegroundColor Magenta "                Bootstrap Script: Azure | Terraform | Github                "
 Write-Host -ForegroundColor Cyan "===========================================================================`r`n"
+Write-Host -ForegroundColor Cyan "*** Performing Initial Checks & Validations"
 
-Write-Host -ForegroundColor Cyan "*** Performing Checks & Validations"
-# Validate: local environment variables file.
-Write-Log -Level "SYS" -Message "Check: Validate local variables file: "
-if(Test-Path -Path ".\env.psd1" -PathType Leaf) {
+# Validate: Local variables file. Use content for populating TFVARS and other settings.
+Write-Log -Level "SYS" -Message "Check: Validate local variables file... "
+Try{
+    $config = Import-PowerShellDataFile -Path $envFile -ErrorAction Stop
+    Write-Host "PASS" -ForegroundColor Green
+}
+Catch{
+    Write-Host "FAIL" -ForegroundColor Red
+    Write-Log -Level "ERR" -Message "- Failed to import local variables file '$($envFile)'."
+    Write-Log -Level "ERR" -Message "- $_"
+    exit 1
+}
+
+# Validate: Check install status for required applications.
+Write-Log -Level "SYS" -Message "Check: Required applications... "
+ForEach($app in $requiredApps) {
     Try{
-        $config = Import-PowerShellDataFile -Path $envFile
-        Write-Host "PASS" -ForegroundColor Green
+        # Attempt to get the command for each application to test if installed.
+        Get-Command $app.Command > $null 2>&1
     }
     Catch{
         Write-Host "FAIL" -ForegroundColor Red
-        Write-Log -Level "ERR" -Message " - Failed to import local environment variables."
+        Write-Log -Level "ERR" -Message "- Required application '$($app.Name)' is missing. Please install and try again."
         exit 1
     }
-}
-else {
-    Write-Log -Level "ERR" -Message " - Local environment variables file 'env.psd1' not found. Please create from example file and update values as required."
-    exit 1
-}
+} 
+Write-Host "PASS" -ForegroundColor Green
 
-# Validate: Check for required applications.
-Write-Log -Level "SYS" -Message "Check: Required applications: "
-$appResults = @()
-ForEach($app in $requiredApps) {
-    Try{
-        # Attempt to get the command for each application to test if actually installed.
-        Get-Command $app.Command > $null 2>&1
-        $appResults += [pscustomobject] @{Name = "$($app.Name)"; Status = "Installed"}
-    }
-    Catch{
-        $appResults += [pscustomobject] @{Name = "$($app.Name)"; Status = "Missing"}
-    }
-}
-if($appResults | Where-Object { $_.Status -eq "Missing" }) {
-    Write-Host "FAIL" -ForegroundColor Red
-    Write-Log -Level "ERR" -Message " - Required applications check failed. Please install missing applications and try again."
-    $appResults | Format-Table -AutoSize
-    exit 1
-} else{
+# Validate: Github CLI authentication. Check for existing authenticated session.
+Write-Log -Level "SYS" -Message "Check: Validate Github CLI authenticated session... "
+Try{
+    $ghSession = gh api user 2>$null | ConvertFrom-JSON
     Write-Host "PASS" -ForegroundColor Green
-}
+    Write-Log -Level "INF" -Message "- Github CLI logged in as: $($ghSession.login) [$($ghSession.html_url)]"
 
-# Validate: Azure CLI authentication.
-# Enable preview extensions, required for renaming subscription.
-az config set extension.dynamic_install_allow_preview=true --only-show-errors
-Write-Log -Level "SYS" -Message "Check: Validate Azure CLI authenticated session: "
-$azSession = az account show -o json | ConvertFrom-JSON 2>$null
-if (-not $azSession) {
-    Write-Host "FAIL" -ForegroundColor Red
-    Write-Log -Level "WRN" -Message " - Not authenticated to Azure CLI. Please run 'az login' and try again."
-    exit 1
-} else{
-    Write-Host "PASS" -ForegroundColor Green
-    Write-Log -Level "INF" -Message " - Azure CLI logged in as: $($azSession.user.name) [$($azSession.tenantDefaultDomain)]"
-    # Check intended Azure tenant ID matches current session.
-    if ($azSession.tenantId -ne $config.azure_tenant_id) {
-        Write-Log -Level "ERR" -Message " - Azure CLI tenant ID does not match intended target tenant. Please switch to the correct tenant and try again."
-        Write-Log -Level "ERR" -Message "   - Current session tenant ID: $($azSession.tenantId)"
-        Write-Log -Level "ERR" -Message "   - Intended target tenant ID: $($config.azure_tenant_id)"
-        exit 1
-    } else{
-        Write-Log -Level "INF" -Message " - Current session tenant ID matches intended target: $($config.azure_tenant_id)"
-        if( -not( $($azSession.name) -eq "$($config.naming.prefix)-$($config.naming.project)-$($config.naming.environment)-sub") ){
-            if(-not $destroy){
+    # Check if repository already exists, prompt to remove and re-create (unless $destroy flag is set).
+    $gh_org = ($ghSession.html_url).Replace("https://github.com/","")
+    if(-not ($destroy) ){
+        $repoCheck = (gh repo list --json name | ConvertFrom-JSON)
+        if ($repoCheck | Where-Object {$_.name -eq "$($config.github_config.repo)"} ) {
+            Write-Log -Level "WRN" -Message "- Repository '$($gh_org)/$($config.github_config.repo)' already exists."
+            Write-Log -Level "WRN" -Message "- This repository must be removed and re-created to ensure proper configuration."
+            Write-Log -Level "WRN" -Message "- If you do not wish to remove this repository, update repository name in variables file. Overwrite?"
+            if(Get-UserConfirm){
                 Try{
-                    # Rename default subscription as platform landing zone.
-                    Write-Log -Level "INF" -Message " - Setting subscription name to: $($config.naming.prefix)-$($config.naming.project)-$($config.naming.environment)-sub [$($azSession.id)]"
-                    $subRename = az account subscription rename --subscription-id "$($config.platform_subscription_ids[0])" `
-                    --name "$($config.naming.prefix)-$($config.naming.project)-$($config.naming.environment)-sub" --only-show-errors
-                    $subRename | Out-Null
+                    gh repo delete "$($gh_org)/$($config.github_config.repo)" --yes 2>$null
+                    Write-Log -Level "INF" -Message "- Repository '$($gh_org)/$($config.github_config.repo)' removed successfully."
                 }
                 Catch{
-                    Write-Log -Level "WRN" -Message " - Failed to rename subscription. Please check permissions and try again. Skip."
+                    Write-Log -Level "ERR" -Message "- Failed to remove GitHub repository. Please check configuration and try again."
+                    Write-Log -Level "ERR" -Message "- $_"
+                    exit 1
                 }
             }
-        }
-    }
-}
-
-# Validate Github CLI authentication.
-Write-Log -Level "SYS" -Message "Check: Validate Github CLI authenticated session: "
-$ghSession = gh api user 2>$null | ConvertFrom-JSON
-if (-not $ghSession) {
-    Write-Host "FAIL" -ForegroundColor Red
-    Write-Log -Level "WRN" -Message " - Not authenticated to GitHub CLI. Please run 'gh auth login' and try again."
-    exit 1
-} else{
-    Write-Host "PASS" -ForegroundColor Green
-    Write-Log -Level "INF" -Message " - Github CLI logged in as: $($ghSession.login) [$($ghSession.html_url)]"
-    # Check if provided repo exists, prompt to remove it as it will be re-created by Terraform.
-    $repoCheck = (gh repo list --json name | ConvertFrom-JSON)
-    if ($repoCheck | Where-Object {$_.name -eq "$($config.github_config.repo)"} ) {
-        Write-Log -Level "WRN" -Message " - Repository '$($config.github_config.org)/$($config.github_config.repo)' already exists."
-        Write-Log -Level "WRN" -Message " - This repository must be removed and re-created to ensure proper configuration."
-        Write-Log -Level "WRN" -Message " - If you cannot remove this repository, please provide a different repository name. Overwrite?"
-        if(Get-UserConfirm){
-            try{
-                gh repo delete "$($config.github_config.org)/$($config.github_config.repo)" --yes
-                Write-Log -Level "INF" -Message " - Repository '$($config.github_config.org)/$($config.github_config.repo)' removed successfully."
-            }
-            catch{
-                Write-Log -Level "ERR" -Message " - Failed to remove GitHub repository. Please check configuration and try again."
+            else{
+                Write-Log -Level "ERR" -Message "- Repository deletion aborted. Please remove manually, or provide a different name and try again."
                 exit 1
             }
         }
-        else{
-            Write-Log -Level "ERR" -Message " - Repository deletion aborted. Please remove manually, or provide a different name and try again."
-            exit 1
-        }
     }
+} 
+Catch{
+    Write-Host "FAIL" -ForegroundColor Red
+    Write-Log -Level "ERR" -Message "- Failed GitHub CLI authentication check. Please run 'gh auth login' and try again."
+    exit 1
 }
 
-#=============================================#
-# MAIN: Generate TFVARS file for Terraform
-#=============================================#
+# Validate: Azure CLI authentication. Check for existing authenticated session.
+Write-Log -Level "SYS" -Message "Check: Validate Azure CLI authenticated session... "
+$azCheck = $( az account show --only-show-errors )
+if(-not ( $azCheck ) ){
+    Write-Host "FAIL" -ForegroundColor Red
+    Write-Log -Level "ERR" -Message "- Failed Azure CLI authentication check. Please run 'az login' manually and try again."
+    exit 1
+}
+else{
+    Write-Host "PASS" -ForegroundColor Green
+    $azSession = az account show --only-show-errors 2>&1 | ConvertFrom-JSON
+    Write-Log -Level "INF" -Message "- Current User: $($azSession.user.name)"
+    Write-Log -Level "INF" -Message "- Azure Tenant: $($azSession.tenantDefaultDomain) [$($azSession.tenantId)]"
+    Write-Log -Level "INF" -Message "- Subscription: $($azSession.name) [$($azSession.id)]"
+}
 
-# Execute Terraform Deployment.
-# Build out Terraform TFVARS file from local env.psd1 file and write to Terraform directory.
-$terraformTFVARS = @"
+#================================================#
+# MAIN: Stage 2 - Display Intended Actions
+#================================================#
+
+Write-Host "Target Azure Environment:" -ForegroundColor Cyan
+Write-Host "- Tenant ID: $($azSession.tenantId)"
+Write-Host "- Subscription ID: $($azSession.id)"
+Write-Host "- Subscription Name: $($azSession.name)"
+Write-Host "- Location: $($config.location)"
+Write-Host ""
+Write-Host "The following resources will be " -ForegroundColor Cyan -NoNewLine
+Write-Host "$(($sys_action.past).ToUpper()):" -ForegroundColor $sys_action.colour
+
+Write-Host "- Github:" -ForegroundColor Yellow
+Write-Host "  - Target Repository: $gh_org/$($config.github_config.repo)"
+Write-Host "  - Secrets: Used by workflows for authentication."
+Write-Host "  - Variables: Used by workflows for Terraform remote backend."
+Write-Host "- Azure:" -ForegroundColor Yellow
+Write-Host "  - Core Management Group: $($config.core_management_group_display_name) ($($config.core_management_group_id))"
+Write-Host "  - Entra ID Service Principal: $($config.naming.prefix)-$($config.naming.project)-$($config.naming.service)-sp"
+if($destroy){
+    Write-Host "  - Resource Group: $($config.naming.prefix)-$($config.naming.project)-$($config.naming.service)-rg" -NoNewline
+    Write-Host " (** INCLUDES ALL CHILD RESOURCES **)" -ForegroundColor $sys_action.colour
+}
+else{
+    Write-Host "  - Resource Group: $($config.naming.prefix)-$($config.naming.project)-$($config.naming.service)-rg"
+    Write-Host "  - Storage Account: ** Determined during deployment (requires random integers) **"
+    Write-Host "  - Storage Container: $($config.naming.prefix)-$($config.naming.project)-$($config.naming.service)-state"
+}
+Write-Host ""
+Write-Log -Level "WRN" -Message "The above resources will be $(($sys_action.past).ToLower()) in the target environment."
+if(-not (Get-UserConfirm) ){
+    Write-Log -Level "ERR" -Message "User aborted process. Please confirm intended configuration and try again."
+    exit 1
+} 
+
+#================================================#
+# MAIN: Stage 3 - Prepare Terraform
+#================================================#
+
+# Generate TFVARS file.
+$tfVARS = @"
 # Azure Settings.
-azure_tenant_id = "$($config.azure_tenant_id)" # Target Azure tenant ID.
 location = "$($config.location)" # Desired location for resources to be deployed in Azure.
-platform_subscription_ids = ["$( $config.platform_subscription_ids -join '","')"] # Platform subscriptions (to be moved to workloads MG).
-workload_subscription_ids = ["$( $config.workload_subscription_ids -join '","')"] # Workload subscriptions (to be moved to workloads MG).
 core_management_group_id = "$($config.core_management_group_id)" # Desired ID for the top-level management group (under Tenant Root).
-core_management_group_display_name = "$($config.core_management_group_display_name)" # Display name for the top-level management group (under Tenant Root).
+core_management_group_display_name = "$($config.core_management_group_display_name)" # Desired display name for the top-level management group.
 
 # Naming Settings (used for resource names).
-org_naming = {
-  prefix = "$($config.naming.prefix)" # Short name of organization ("abc").
-  project = "$($config.naming.project)" # Project name for related resources ("platform", "landingzone").
-  service = "$($config.naming.service)" # Service name used in the project ("iac", "mgt", "sec").
-  environment = "$($config.naming.environment)" # Environment for resources/project ("dev", "tst", "prd", "alz").
+naming = {
+    prefix = "$($config.naming.prefix)" # Short name of organization ("abc").
+    project = "$($config.naming.project)" # Project name for related resources ("platform", "landingzone").
+    service = "$($config.naming.service)" # Service name used in the project ("iac", "mgt", "sec").
+    environment = "$($config.naming.environment)" # Environment for resources/project ("dev", "tst", "prd", "alz").
 }
 
 # Tags (assigned to all bootstrap resources).
-org_tags = {
-  Project = "$($config.tags.Project)"
-  Environment = "$($config.tags.Environment)" # dev, tst, prd, alz
-  Owner = "$($config.tags.Owner)"
-  Creator = "$($config.tags.Creator)"
-  Created = "$(Get-Date -f 'yyyyMMdd.HHmm')"
+tags = {
+    Project = "$($config.tags.project)" # Name of the project the resources are for.
+    Environment = "$($config.tags.environment)" # dev, tst, prd, alz
+    Owner = "$($config.tags.owner)" # Team responsible for the resources.
+    Creator = "$($config.tags.creator)" # Person or process that created the resources.
+    Deployment = "$(Get-Date -f "yyyyMMdd.HHmmss")" # Timestamp for identifying deployment.
 }
 
 # GitHub Settings.
 github_config = {
-  org = "$($config.github_config.org)" # Replace with your GitHub organization name.
-  repo = "$($config.github_config.repo)" # Replace with your GitHub repository name.
-  repo_desc = "$($config.github_config.repo_desc)" # Description for the GitHub repository.
-  branch = "$($config.github_config.branch)" # Replace with your GitHub repository name.
-  visibility = "$($config.github_config.visibility)" # Set to "public" or "private" as required.
+    repo = "$($config.github_config.repo)" # Replace with your new desired GitHub repository name. Must be unique within the organization and empty.
+    repo_desc = "$($config.github_config.repo_desc)" # Description for the GitHub repository.
+    branch = "$($config.github_config.branch)" # Replace with your preferred branch name.
+    visibility = "$($config.github_config.visibility)" # Set to "public" or "private" as required.
 }
-"@
-Set-Content -Path "$($workingDir)\bootstrap.tfvars" -Value $terraformTFVARS -Force
 
-#=============================================#
-# MAIN: Terrafrom Init & Apply
-#=============================================#
+"@
+# Write out TFVARS file (only if not already exists).
+if(-not (Test-Path -Path "$workingDir\bootstrap.tfvars") ){
+    $tfVARS | Out-File -Encoding utf8 -FilePath "$workingDir\bootstrap.tfvars" -Force
+}
 
 # Terraform: Initialize
 Write-Log -Level "SYS" -Message "Performing Action: Initialize Terraform configuration... "
@@ -260,7 +283,7 @@ if(terraform -chdir="$($workingDir)" init -upgrade){
     Write-Host "PASS" -ForegroundColor Green
 } else{
     Write-Host "FAIL" -ForegroundColor Red
-    Write-Log -Level "ERR" -Message " - Terraform initialization failed. Please check configuration and try again."
+    Write-Log -Level "ERR" -Message "- Terraform initialization failed. Please check configuration and try again."
     exit 1
 }
 
@@ -270,81 +293,118 @@ if(terraform -chdir="$($workingDir)" validate){
     Write-Host "PASS" -ForegroundColor Green
 } else{
     Write-Host "FAIL" -ForegroundColor Red
-    Write-Log -Level "ERR" -Message " - Terraform validation failed. Please check configuration and try again."
+    Write-Log -Level "ERR" -Message "- Terraform validation failed. Please check configuration and try again."
     exit 1
 }
 
-# Terraform: Plan
-Write-Log -Level "SYS" -Message "Performing Action: Running Terraform plan... "
-if(terraform -chdir="$($workingDir)" plan --out=bootstrap.tfplan -var-file="bootstrap.tfvars"){
-    Write-Host "PASS" -ForegroundColor Green
-    # Show plan output.
-    terraform -chdir="$($workingDir)" show "$workingDir\bootstrap.tfplan"
-} else{
-    Write-Host "FAIL" -ForegroundColor Red
-    Write-Log -Level "ERR" -Message " - Terraform plan failed. Please check configuration and try again."
-    exit 1
-}
+#===================================================#
+# MAIN: Stage 4 - Execute Terraform (Deploy/Destroy)
+#===================================================#
 
-# Terraform: Apply
-Write-Log -Level "WRN" -Message "Terraform will now deploy resources. This may take several minutes to complete."
-if(Get-UserConfirm){
+if($destroy){
+    # Terraform: Destroy
     Write-Log -Level "SYS" -Message "Performing Action: Running Terraform deployment... "
-    if(terraform -chdir="$($workingDir)" apply bootstrap.tfplan){
+    if(terraform -chdir="$($workingDir)" destroy --auto-approve `
+        -var-file="bootstrap.tfvars" `
+        -var="azure_tenant_id=$($azSession.tenantId)" `
+        -var="platform_subscription_id=$($azSession.id)" `
+        -var="github_org=$($gh_org)"
+    ){
         Write-Host "PASS" -ForegroundColor Green
+        Write-Host -ForegroundColor Cyan "`r`n*** Bootstrap Removal Complete! ***`r`n"
     } else{
         Write-Host "FAIL" -ForegroundColor Red
-        Write-Log -Level "ERR" -Message " - Terraform plan failed. Please check configuration and try again."
+        Write-Log -Level "ERR" -Message "- Terraform plan failed. Please check configuration and try again."
         exit 1
     }
 }
 else{
-    Write-Log -Level "WRN" -Message " - Terraform apply aborted by user."
-    exit 1
+    # Terraform: Plan
+    Write-Log -Level "SYS" -Message "Performing Action: Running Terraform plan... "
+    if(terraform -chdir="$($workingDir)" plan --out=bootstrap.tfplan `
+            -var-file="bootstrap.tfvars" `
+            -var="azure_tenant_id=$($azSession.tenantId)" `
+            -var="platform_subscription_id=$($azSession.id)" `
+            -var="github_org=$($gh_org)"
+    ){
+        Write-Host "PASS" -ForegroundColor Green
+        terraform -chdir="$($workingDir)" show "$workingDir\bootstrap.tfplan"
+    } else{
+        Write-Host "FAIL" -ForegroundColor Red
+        Write-Log -Level "ERR" -Message "- Terraform plan failed. Please check configuration and try again."
+        exit 1
+    }
+
+    # Terraform: Apply
+    if(Test-Path -Path "$workingDir\bootstrap.tfplan"){
+        Write-Host ""
+        Write-Log -Level "WRN" -Message "Terraform will now deploy resources. This may take several minutes to complete."
+        Write-Log -Level "SYS" -Message "Performing Action: Running Terraform apply... "
+        if(terraform -chdir="$($workingDir)" apply bootstrap.tfplan){
+            Write-Host "PASS" -ForegroundColor Green
+            Write-Host -ForegroundColor Cyan "`r`n*** Bootstrap Deployment Complete! ***`r`n"
+        } else{
+            Write-Host "FAIL" -ForegroundColor Red
+            Write-Log -Level "ERR" -Message "- Terraform plan failed. Please check configuration and try again."
+            exit 1
+        }
+    } else{
+        Write-Log -Level "ERR" -Message "- Terraform plan file missing! Please check configuration and try again."
+        exit 1  
+    }
+
 }
 
-#=============================================#
-# MAIN: Terrafrom Migrate State
-#=============================================#
+#================================================#
+# MAIN: Stage 6 - Clone to New Repo
+#================================================#
+
+# Create Github repository.
+# Write-Log -Level "SYS" -Message "$($sys_action.past): GitHub Repository... "
+# Try{
+#     gh repo delete "$($gh_org)/$($config.github_config.repo)" --yes 2>$null
+#     Write-Log -Level "INF" -Message "- Repository '$($gh_org)/$($config.github_config.repo)' create successfully."
+# }
+# Catch{
+#     Write-Log -Level "ERR" -Message "- Failed to remove GitHub repository. Please check configuration and try again."
+#     Write-Log -Level "ERR" -Message "- $_"
+#     exit 1
+# }
 
 # Get Github variables from Terraform output.
 # $tf_rg = terraform -chdir=deployments/bootstrap output -raw tf_backend_rg_name
-Write-Log -Level "SYS" -Message "Retrieving Terraform backend details from output... "
-Try{
-    $tf_rg = terraform -chdir="$($workingDir)" output -raw tf_backend_rg_name
-    $tf_sa = terraform -chdir="$($workingDir)" output -raw tf_backend_sa_name
-    $tf_cn = terraform -chdir="$($workingDir)" output -raw tf_backend_cn_name
-    Write-Host "PASS" -ForegroundColor Green
-    Write-Log -Level "INF" -Message " - Terraform backend details retrieved successfully."
-}
-Catch{
-    Write-Host "FAIL" -ForegroundColor Red
-    Write-Log -Level "ERR" -Message " - Failed to get Terraform output values. Please check configuration and try again."
-    exit 1
-}
+# Write-Log -Level "SYS" -Message "Retrieving Terraform backend details from output... "
+# Try{
+#     $tf_rg = terraform -chdir="$($workingDir)" output -raw tf_backend_rg_name
+#     $tf_sa = terraform -chdir="$($workingDir)" output -raw tf_backend_sa_name
+#     $tf_cn = terraform -chdir="$($workingDir)" output -raw tf_backend_cn_name
+#     Write-Host "PASS" -ForegroundColor Green
+# }
+# Catch{
+#     Write-Host "FAIL" -ForegroundColor Red
+#     Write-Log -Level "ERR" -Message "- Failed to get Terraform output values. Please check configuration and try again."
+#     exit 1
+# }
 
-# Generate backend config file for state migration.
-$backendConfig = @"
-    terraform {
-      backend "azurerm" {
-        resource_group_name  = "$($tf_rg)"
-        storage_account_name = "$($tf_sa)"
-        container_name       = "$($tf_cn)"
-        key                  = "bootstrap.tfstate"
-      }
-    }
-"@
-Set-Content -Path "$($workingDir)\backend.tf" -Value $backendConfig -Force
+# # Generate backend config file for state migration.
+# $tfBackend = @"
+# terraform {
+#     backend "azurerm" {
+#     resource_group_name  = "$($tf_rg)"
+#     storage_account_name = "$($tf_sa)"
+#     container_name       = "$($tf_cn)"
+#     key                  = "bootstrap.tfstate"
+#     }
+# }
+# "@
+# $tfBackend | Out-File -Encoding utf8 -FilePath "$workingDir\backend.tf" -Force
 
-# Terraform: Migrate State
-Write-Log -Level "WRN" -Message "Terraform will now migrate state to Azure."
-if(Get-UserConfirm){
-    terraform -chdir="$($workingDir)" init -migrate-state
-    # Cleanup temporary files.
-    #Remove-Item -Path "$($workingDir)\backend.tf" -Force
-    Remove-Item -Path "$($workingDir)\bootstrap.tfplan" -Force
-}
-else{
-    Write-Log -Level "WRN" -Message " - Terraform apply aborted by user."
-    exit 1
-}
+# # Terraform: Migrate State
+# Write-Log -Level "WRN" -Message "Terraform will now migrate state to Azure."
+# if(Get-UserConfirm){
+#     terraform -chdir="$($workingDir)" init -migrate-state
+# }
+# else{
+#     Write-Log -Level "WRN" -Message "- Terraform apply aborted by user."
+#     exit 1
+# }

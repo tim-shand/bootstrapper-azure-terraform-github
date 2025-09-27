@@ -21,7 +21,7 @@ terraform {
 }
 provider "azurerm" {
   features {}
-  subscription_id = var.platform_subscription_ids[0]
+  subscription_id = var.platform_subscription_id
   tenant_id       = var.azure_tenant_id
 }
 provider "random" {}

@@ -1,7 +1,10 @@
-# Azure Settings.
-
 variable "azure_tenant_id" {
   description = "The Azure Tenant ID to deploy resources into."
+  type        = string
+}
+
+variable "platform_subscription_id" {
+  description = "Platform subscription ID for the management group structure."
   type        = string
 }
 
@@ -9,17 +12,6 @@ variable "location" {
   description = "The Azure location to deploy resources into."
   type        = string
   default     = "australiaeast"
-}
-
-variable "platform_subscription_ids" {
-  description = "A list of platform subscription IDs for the management group structure ['a', 'b', 'c']."
-  type        = list(string)
-}
-
-variable "workload_subscription_ids" {
-  description = "A list of workload subscription IDs for the management group structure ['a', 'b', 'c']."
-  type        = list(string)
-  nullable    = true # Allows to explicitly set this variable to null.
 }
 
 variable "core_management_group_id" {
@@ -32,16 +24,21 @@ variable "core_management_group_display_name" {
   type        = string
 }
 
-variable "org_naming" {
+variable "naming" {
   description = "A map of naming parameters to use with resources."
   type        = map(string)
   default     = {}
 }
 
-variable "org_tags" {
+variable "tags" {
   description = "A map of tags to apply to resources."
   type        = map(string)
   default     = {}
+}
+
+variable "github_org" {
+  description = "GitHub organziation name."
+  type        = string
 }
 
 variable "github_config" {
