@@ -1,0 +1,86 @@
+name: Terraform-Deploy-PLZ
+
+# Triggers
+on:
+  # push:
+  #   branches:
+  #     - main # Trigger the workflow on commits to the main branch.
+  #   paths:
+  #     - 'terraform/deployments/platform-lz/**' # Only trigger for changes in the deployment directory.
+  #     - 'terraform/modules/**' # Also trigger for changes in modules.
+  # pull_request:
+  #   branches:
+  #     - main # Trigger the workflow on pull requests to the main branch.
+  #   paths:
+  #     - 'terraform/deployments/platform-lz/**' # Only trigger for changes in the deployment directory.
+  #     - 'terraform/modules/**' # Also trigger for changes in modules.
+  workflow_dispatch: # Manual run.
+    inputs:
+      action:
+        description: 'Deployment Type'
+        required: true
+        default: 'Plan'
+        type: choice
+        options:
+          - 'Plan'
+          - 'Apply'
+          - 'Destroy'
+
+permissions:
+  id-token: write   # required for OIDC
+  contents: read    # required for checkout
+
+# Jobs
+jobs:
+  terraform:
+    name: "Terraform Deployment"
+    runs-on: ubuntu-latest # Use the latest Ubuntu runner.
+
+    defaults:
+      run:
+        working-directory: ./deployments/platform-lz
+
+    env: # Set environment variables for runner.
+      ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }} # Use GitHub Secrets for sensitive data.
+      ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }} # Azure Platform Subscription ID
+      ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }} # Service Principal Client ID
+      ARM_USE_OIDC: ${{ secrets.ARM_USE_OIDC }} # Use OIDC for authentication
+      CONFIG_DIRECTORY: "./deployments/platform-lz" # Directory containing Terraform configuration files.
+      TFVARS_FILE: "platform-lz.tfvars"
+      ENVIRON: "platform-lz"
+
+    steps:
+
+      - uses: actions/checkout@v4
+      - name: "Checkout Repository"
+        run: |
+          echo "Checkout Respository"
+          ls -al
+
+      - name: "Terraform: Setup"
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.13.1
+
+      - name: "Terraform: Init"
+        run: |
+          terraform init -backend-config="resource_group_name=$TF_BACKEND_RG_NAME" \
+          -backend-config="storage_account_name=$TF_BACKEND_SA_NAME" \
+          -backend-config="container_name=$TF_BACKEND_CN_NAME" \
+          -backend-config="key=$ENVIRON"
+
+      - name: "Terraform: Plan"
+        if: ${{ github.event.inputs.action == 'Plan' }}
+        run: |
+          terraform plan -out="tf.plan" -var-file=$TFVARS_FILE -var=$ARM_TENANT_ID -var=$ARM_SUBSCRIPTION_ID
+
+      - name: "Terraform: Apply"
+        if: ${{ github.event.inputs.action == 'Plan-Apply' }}
+        run: |
+          terraform plan -out="tf.plan" -var-file=$TFVARS_FILE -var=$ARM_TENANT_ID -var=$ARM_SUBSCRIPTION_ID
+          terraform apply --auto-approve -input=false "tf.plan"
+
+      - name: "Terraform: Destroy"
+        if: ${{ github.event.inputs.action == 'Destroy' }}
+        run: |
+          terraform destroy --auto-approve -var-file=$TFVARS_FILE -var=$ARM_TENANT_ID -var=$ARM_SUBSCRIPTION_ID
