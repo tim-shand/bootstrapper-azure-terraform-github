@@ -354,7 +354,6 @@ else{
             Write-Log -Level "SYS" -Message "Performing Action: Running Terraform apply... "
             if(terraform -chdir="$($workingDir)" apply bootstrap.tfplan){
                 Write-Host "PASS" -ForegroundColor Green
-                Write-Host -ForegroundColor Cyan "`r`n*** Bootstrap Deployment Complete! ***`r`n"
             } else{
                 Write-Host "FAIL" -ForegroundColor Red
                 Write-Log -Level "ERR" -Message "- Terraform plan failed. Please check configuration and try again."
@@ -371,18 +370,48 @@ else{
 # MAIN: Stage 6 - Clone to New Repo
 #================================================#
 
+# Create temporary folder for repo and initialize Git.
+Write-Log -Level "SYS" -Message "Creating temporary directory for new Git repository... "
+Try{
+    $tmpdir = (New-Item -ItemType Directory -Path "..\tmpdir" -Force)
+    $file_copy = (Copy-Item -Path ".\*" -Destination $tmpdir.fullname -Recurse -Force -Exclude ".git")
+    $git_init = git init $($tmpdir.fullname)
+    Write-Host "PASS" -ForegroundColor Green
+}
+Catch{
+    Write-Host "FAIL" -ForegroundColor Red
+    Write-Log -Level "ERR" -Message "- Failed to create temporary directory for Git. Please check permissions and try again."
+    Write-Log -Level "ERR" -Message "- $_"
+}
 
-# Create Github repository.
-# Write-Log -Level "SYS" -Message "$($sys_action.past): GitHub Repository... "
-# Try{
-#     gh repo delete "$($gh_org)/$($config.github_config.repo)" --yes 2>$null
-#     Write-Log -Level "INF" -Message "- Repository '$($gh_org)/$($config.github_config.repo)' create successfully."
-# }
-# Catch{
-#     Write-Log -Level "ERR" -Message "- Failed to remove GitHub repository. Please check configuration and try again."
-#     Write-Log -Level "ERR" -Message "- $_"
-#     exit 1
-# }
+# Confirm access to repository.
+Write-Log -Level "SYS" -Message "Confirming access to remote GitHub repository ($($gh_org)/$($config.github_config.repo))... "
+if(gh repo view $($gh_org)/$($config.github_config.repo)){
+    Write-Host "PASS" -ForegroundColor Green
+}
+else{
+    Write-Host "FAIL" -ForegroundColor Red
+    Write-Log -Level "ERR" -Message "- Unable to access target repository. Please ensure access is available and try again."
+    exit 1
+}
+
+# Commit local code to remote repository.
+Write-Log -Level "SYS" -Message "Committing codebase to new Git repository ($($gh_org)/$($config.github_config.repo))... "
+Try{
+    $gh_url = gh repo view $($gh_org)/$($config.github_config.repo) --json url | ConvertFrom-JSON
+    $git = git -C $($tmpdir.fullname) remote add origin $gh_url.url
+    $git = git -C $($tmpdir.fullname) add .
+    $git = git -C $($tmpdir.fullname) commit -m "Initial commit."
+    $git = git -C $($tmpdir.fullname) push origin main
+    Write-Host "PASS" -ForegroundColor Green
+}
+Catch{
+    Write-Host "FAIL" -ForegroundColor Red
+    Write-Log -Level "ERR" -Message "- Unable to push into repository. Please ensure access is available and try again."
+    exit 1
+}
+
+
 
 # Get Github variables from Terraform output.
 # $tf_rg = terraform -chdir=deployments/bootstrap output -raw tf_backend_rg_name
@@ -421,3 +450,6 @@ else{
 #     Write-Log -Level "WRN" -Message "- Terraform apply aborted by user."
 #     exit 1
 # }
+
+$git, $git_init, $file_copy > $null # Shut up VS Code complaining about unreferenced vars.
+Write-Host -ForegroundColor Cyan "`r`n*** Bootstrap Deployment Complete! ***`r`n"
