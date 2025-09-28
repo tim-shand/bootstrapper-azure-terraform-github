@@ -4,8 +4,8 @@
 
 resource "github_repository" "gh_repo" {
   name          = var.github_config["repo"]
-  description   = "Azure: Platform Landing Zone - Infrastructure as Code"
-  visibility    = "private"
+  description   = var.github_config["repo_desc"]
+  visibility    = var.github_config["visibility"]
 }
 
 # Github: Secrets - Add Federated Identity Credential for OIDC.
