@@ -22,6 +22,7 @@ on:
         default: 'Plan'
         type: choice
         options:
+          - 'Display Vars'
           - 'Plan'
           - 'Apply'
           - 'Destroy'
@@ -50,6 +51,14 @@ jobs:
       ENVIRON: "platform-lz"
 
     steps:
+
+      - name: "Display Variables"
+        if: ${{ github.event.inputs.action == 'Plan' }}
+        run: |
+          echo "TF_BACKEND_RG_NAME = $TF_BACKEND_RG_NAME"
+          echo "TF_BACKEND_SA_NAME = $TF_BACKEND_SA_NAME"
+          echo "TF_BACKEND_CN_NAME = $TF_BACKEND_CN_NAME"
+          echo "Key = $ENVIRON"
 
       - uses: actions/checkout@v4
       - name: "Checkout Repository"
