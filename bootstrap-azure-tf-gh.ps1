@@ -469,9 +469,6 @@ if(-not ($destroy) ){
     Write-Log -Level "SYS" -Message "Running clean up process... "
     Try{
         $tmpdir = (Remove-Item -Path "..\tmp_git_dir" -Recurse -Force)
-        $file_del = (Remove-Item -Path ".\.terraform" -Recurse -Force)
-        $file_del = (Remove-Item -Path ".\.terraform.*" -Force)
-        $file_del = (Remove-Item -Path ".\*.tfstate*" -Force)
         Write-Host "PASS" -ForegroundColor Green
     }
     Catch{
