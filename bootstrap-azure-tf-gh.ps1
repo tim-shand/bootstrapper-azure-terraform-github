@@ -28,7 +28,7 @@ param(
     [switch]$destroy, # Add switch parameter for delete option.
     [Parameter(Mandatory=$true)][string]$envFile # Local variables file ".\env.psd1".
 )
-$workingDir = "$((Get-Location).Path)\bootstrap" # Working directory for Terraform files
+$workingDir = "$((Get-Location).Path)\deployments\bootstrap" # Working directory for Terraform files
 
 # Required applications.
 $requiredApps = @(
@@ -367,89 +367,118 @@ else{
 }
 
 #================================================#
+# MAIN: Stage 5 - Migrate State to Azure
+#================================================#
+
+if(-not ($destroy)){
+    # Get Github variables from Terraform output.
+    Write-Log -Level "SYS" -Message "Retrieving Terraform backend details from output... "
+    Try{
+        $tf_rg = terraform -chdir="$($workingDir)" output -raw tf_backend_rg_name
+        $tf_sa = terraform -chdir="$($workingDir)" output -raw tf_backend_sa_name
+        $tf_cn = terraform -chdir="$($workingDir)" output -raw tf_backend_cn_name
+        Write-Host "PASS" -ForegroundColor Green
+    }
+    Catch{
+        Write-Host "FAIL" -ForegroundColor Red
+        Write-Log -Level "ERR" -Message "- Failed to get Terraform output values. Please check configuration and try again."
+        exit 1
+    }
+
+    # Generate backend config for state migration.
+    $tfBackend = `
+@"
+terraform {
+    backend "azurerm" {
+    resource_group_name  = "$($tf_rg)"
+    storage_account_name = "$($tf_sa)"
+    container_name       = "$($tf_cn)"
+    key                  = "bootstrap.tfstate"
+    }
+}
+"@
+    $tfBackend | Out-File -Encoding utf8 -FilePath "$workingDir\backend.tf" -Force
+
+    # Terraform: Migrate State
+    Write-Log -Level "WRN" -Message "Terraform will now migrate state to Azure."
+    if(Get-UserConfirm){
+        Write-Log -Level "SYS" -Message "Migrating Terraform state to Azure... "
+        if(terraform -chdir="$($workingDir)" init -migrate-state -force-copy -input=false){
+            Write-Host "PASS" -ForegroundColor Green
+        }
+        else{
+            Write-Host "FAIL" -ForegroundColor Red
+            Write-Log -Level "ERR" -Message "- Failed to migrate Terraform state to Azure."
+        }
+    }
+    else{
+        Write-Log -Level "WRN" -Message "- Terraform state migration aborted by user."
+        exit 1
+    }
+}
+
+#================================================#
 # MAIN: Stage 6 - Clone to New Repo
 #================================================#
 
-# Create temporary folder for repo and initialize Git.
-Write-Log -Level "SYS" -Message "Creating temporary directory for new Git repository... "
-Try{
-    $tmpdir = (New-Item -ItemType Directory -Path "..\tmpdir" -Force)
-    $file_copy = (Copy-Item -Path ".\*" -Destination $tmpdir.fullname -Recurse -Force -Exclude ".git")
-    $git_init = git init $($tmpdir.fullname)
-    Write-Host "PASS" -ForegroundColor Green
+if(-not ($destroy) ){
+
+    # Confirm access to remote GitHub repository.
+    Write-Log -Level "SYS" -Message "Confirming access to remote GitHub repository ($($gh_org)/$($config.github_config.repo))... "
+
+    if( gh repo view "$($gh_org)/$($config.github_config.repo)" ){
+        Write-Host "PASS" -ForegroundColor Green
+        $gh_url = (gh repo view "$($gh_org)/$($config.github_config.repo)" --json url | ConvertFrom-JSON).url
+    }
+    else{
+        Write-Host "FAIL" -ForegroundColor Red
+        Write-Log -Level "ERR" -Message "- Unable to access target repository. Please ensure access is available and try again."
+        exit 1
+    }
+
+    # Create temporary folder for repo and initialize Git.
+    Write-Log -Level "SYS" -Message "Creating temporary directory for new Git repository... "
+    Try{
+        $tmpdir = (New-Item -ItemType Directory -Path "..\tmp_git_dir" -Force)
+        $file_copy = (Copy-Item -Path ".\*" -Destination $tmpdir.fullname -Recurse -Force -Exclude ".git")
+        $git_init = git init $($tmpdir.fullname)
+        Write-Host "PASS" -ForegroundColor Green
+    }
+    Catch{
+        Write-Host "FAIL" -ForegroundColor Red
+        Write-Log -Level "ERR" -Message "- Failed to create temporary directory for Git. Please check permissions and try again."
+        Write-Log -Level "ERR" -Message "- $_"
+    }
+
+    # Commit local code to remote repository.
+    Write-Log -Level "SYS" -Message "Committing codebase to Git repository ($gh_url)... "
+    Try{
+        $git = git -C $($tmpdir.fullname) remote add origin $gh_url
+        $git = git -C $($tmpdir.fullname) add .
+        $git = git -C $($tmpdir.fullname) commit -m "Initial commit."
+        $git = git -C $($tmpdir.fullname) push origin main
+        Write-Host "PASS" -ForegroundColor Green
+    }
+    Catch{
+        Write-Host "FAIL" -ForegroundColor Red
+        Write-Log -Level "ERR" -Message "- Unable to push into repository. Please ensure access is available and try again."
+        exit 1
+    }
+
+    # Clean Up
+    Write-Log -Level "SYS" -Message "Running clean up process... "
+    Try{
+        $tmpdir = (Remove-Item -Path "..\tmp_git_dir" -Recurse -Force)
+        $file_del = (Remove-Item -Path ".\.terraform" -Recurse -Force)
+        $file_del = (Remove-Item -Path ".\.terraform.*" -Force)
+        $file_del = (Remove-Item -Path ".\*.tfstate*" -Force)
+        Write-Host "PASS" -ForegroundColor Green
+    }
+    Catch{
+        Write-Host "FAIL" -ForegroundColor Red
+        Write-Log -Level "ERR" -Message "- Failed to clean up all resources. Manual clean up of files may be required."
+    }
 }
-Catch{
-    Write-Host "FAIL" -ForegroundColor Red
-    Write-Log -Level "ERR" -Message "- Failed to create temporary directory for Git. Please check permissions and try again."
-    Write-Log -Level "ERR" -Message "- $_"
-}
 
-# Confirm access to repository.
-Write-Log -Level "SYS" -Message "Confirming access to remote GitHub repository ($($gh_org)/$($config.github_config.repo))... "
-if(gh repo view $($gh_org)/$($config.github_config.repo)){
-    Write-Host "PASS" -ForegroundColor Green
-}
-else{
-    Write-Host "FAIL" -ForegroundColor Red
-    Write-Log -Level "ERR" -Message "- Unable to access target repository. Please ensure access is available and try again."
-    exit 1
-}
-
-# Commit local code to remote repository.
-Write-Log -Level "SYS" -Message "Committing codebase to new Git repository ($($gh_org)/$($config.github_config.repo))... "
-Try{
-    $gh_url = gh repo view $($gh_org)/$($config.github_config.repo) --json url | ConvertFrom-JSON
-    $git = git -C $($tmpdir.fullname) remote add origin $gh_url.url
-    $git = git -C $($tmpdir.fullname) add .
-    $git = git -C $($tmpdir.fullname) commit -m "Initial commit."
-    $git = git -C $($tmpdir.fullname) push origin main
-    Write-Host "PASS" -ForegroundColor Green
-}
-Catch{
-    Write-Host "FAIL" -ForegroundColor Red
-    Write-Log -Level "ERR" -Message "- Unable to push into repository. Please ensure access is available and try again."
-    exit 1
-}
-
-
-
-# Get Github variables from Terraform output.
-# $tf_rg = terraform -chdir=deployments/bootstrap output -raw tf_backend_rg_name
-# Write-Log -Level "SYS" -Message "Retrieving Terraform backend details from output... "
-# Try{
-#     $tf_rg = terraform -chdir="$($workingDir)" output -raw tf_backend_rg_name
-#     $tf_sa = terraform -chdir="$($workingDir)" output -raw tf_backend_sa_name
-#     $tf_cn = terraform -chdir="$($workingDir)" output -raw tf_backend_cn_name
-#     Write-Host "PASS" -ForegroundColor Green
-# }
-# Catch{
-#     Write-Host "FAIL" -ForegroundColor Red
-#     Write-Log -Level "ERR" -Message "- Failed to get Terraform output values. Please check configuration and try again."
-#     exit 1
-# }
-
-# # Generate backend config file for state migration.
-# $tfBackend = @"
-# terraform {
-#     backend "azurerm" {
-#     resource_group_name  = "$($tf_rg)"
-#     storage_account_name = "$($tf_sa)"
-#     container_name       = "$($tf_cn)"
-#     key                  = "bootstrap.tfstate"
-#     }
-# }
-# "@
-# $tfBackend | Out-File -Encoding utf8 -FilePath "$workingDir\backend.tf" -Force
-
-# # Terraform: Migrate State
-# Write-Log -Level "WRN" -Message "Terraform will now migrate state to Azure."
-# if(Get-UserConfirm){
-#     terraform -chdir="$($workingDir)" init -migrate-state
-# }
-# else{
-#     Write-Log -Level "WRN" -Message "- Terraform apply aborted by user."
-#     exit 1
-# }
-
-$git, $git_init, $file_copy > $null # Shut up VS Code complaining about unreferenced vars.
+$git, $git_init, $file_copy, $file_del > $null # Shut up VS Code complaining about unreferenced vars.
 Write-Host -ForegroundColor Cyan "`r`n*** Bootstrap Deployment Complete! ***`r`n"
