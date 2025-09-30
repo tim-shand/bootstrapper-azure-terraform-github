@@ -1,7 +1,5 @@
 # Bootstrapper: Azure + Terraform + Github Actions
 
-**WORK IN PROGRESS**
-
 _Automate the bootstrapping process for an existing Azure tenant, using Terraform for IaC and Github Actions for CI/CD._
 
 ## Requirements
@@ -74,6 +72,6 @@ gh org list
 
 ### Stage 4: Migration Process
 
-- [ ] Migrate local Terraform state to Azure storage account.
-- [ ] Remove all locally created temporary files.
-- [ ] Commit Terraform and Powershell files to created Github repo.
+- [x] Migrate local Terraform state to Azure storage account.
+- [x] Remove locally created temporary files.
+- [x] Commit Terraform and Powershell files to created Github repo.
